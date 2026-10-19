@@ -1,0 +1,19 @@
+# Copy to .dev.vars for local `wrangler pages dev` runs.
+# .dev.vars is git-ignored. In production, set these as Pages secrets:
+#   npx wrangler pages secret put TELEGRAM_BOT_TOKEN --project-name <project>
+
+# From @BotFather
+TELEGRAM_BOT_TOKEN="123456:ABC-DEF..."
+# Any random string; must match the secret_token used in setWebhook
+TELEGRAM_WEBHOOK_SECRET="change-me-long-random-string"
+
+# Groq (https://console.groq.com/keys)
+GROQ_API_KEY=""
+GROQ_MODEL="llama-3.3-70b-versatile"
+
+# Neon PostgreSQL connection string (Neon dashboard -> Connection string)
+DATABASE_URL="postgresql://user:password@ep-xxxx-pooler.aws.neon.tech/neondb?sslmode=require"
+
+# Public URL of THIS Pages project (media + profile link host).
+# Leave empty in local dev to fall back to the incoming request origin.
+PUBLIC_BASE_URL=""

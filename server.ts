@@ -174,13 +174,36 @@ const createPersonaSchema = z.object({
   coverImage: z.string().optional().nullable(),
   gallery: z.string().optional().nullable(),
 
+  // Detailed profile fields (used by the Telegram bot and admin clients)
+  isAdult: z.boolean().default(true),
   age: z.number().optional().nullable(),
   city: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
   occupation: z.string().optional().nullable(),
-  
+  languages: z.string().optional().nullable(),
+
   shortBio: z.string().optional().nullable(),
   longBio: z.string().optional().nullable(),
+
+  // Physical attributes
+  bodyType: z.string().optional().nullable(),
+  bustSize: z.string().optional().nullable(),
+  height: z.string().optional().nullable(),
+  eyeColor: z.string().optional().nullable(),
+  hairColor: z.string().optional().nullable(),
+  tattoosAndPiercings: z.string().optional().nullable(),
+
+  // Suggestive bio & intimacy fields
+  turnOns: z.string().optional().nullable(),
+  turnOffs: z.string().optional().nullable(),
+  fantasies: z.string().optional().nullable(),
+  intimacyStyle: z.string().optional().nullable(),
+  preferredVibe: z.string().optional().nullable(),
+
+  // Specialized erotic interests
+  kinksAndFetishes: z.string().optional().nullable(),
+  favoriteLingerie: z.string().optional().nullable(),
+  eroticInterests: z.string().optional().nullable(),
 
   personality: z.string().min(1),
   background: z.string().min(1),
@@ -188,7 +211,7 @@ const createPersonaSchema = z.object({
   hobbies: z.string().optional().nullable(),
   likes: z.string().optional().nullable(),
   dislikes: z.string().optional().nullable(),
-  
+
   speakingStyle: z.string().min(1),
   communicationTone: z.string().optional().nullable(),
   flirtLevel: z.number().default(0),
