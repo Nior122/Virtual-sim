@@ -1,0 +1,26 @@
+# Cloudflare Pages configuration for the Telegram profile bot.
+#
+# BEGINNER SETUP: you do NOT need this file for the dashboard/GitHub deploy
+# path described in TELEGRAM_BOT_SETUP.md — the KV binding and secrets are
+# configured in the Cloudflare dashboard. This file only matters if you later
+# deploy from your computer with `wrangler pages deploy`.
+#
+# CLI-only setup:
+#   1. npx wrangler kv namespace create BOT_KV
+#   2. paste the returned id below and uncomment the [[kv_namespaces]] block
+#   3. npx wrangler pages deploy . --project-name <your-project>
+
+name = "virtual-sim"
+compatibility_date = "2025-10-01"
+pages_build_output_dir = "dist"
+
+# [[kv_namespaces]]
+# binding = "BOT_KV"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Non-secret public values can live here; secrets (TELEGRAM_BOT_TOKEN,
+# TELEGRAM_WEBHOOK_SECRET, GROQ_API_KEY, DATABASE_URL) are set in the dashboard
+# under Pages -> your project -> Settings -> Environment variables.
+[vars]
+GROQ_MODEL = "llama-3.3-70b-versatile"
+# PUBLIC_BASE_URL = "https://your-project.pages.dev"

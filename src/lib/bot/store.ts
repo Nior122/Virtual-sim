@@ -1,0 +1,69 @@
+import type { Draft, Env, MediaKind, StoredMedia } from "./types";
+import { DRAFT_TTL_SECONDS } from "./types";
+
+const draftKey = (chatId: number) => `draft:${chatId}`;
+const mediaKey = (fileId: string) => `media:${fileId}`;
+
+export async function getDraft(env: Env, chatId: number): Promise<Draft | null> {
+  return env.BOT_KV.get<Draft>(draftKey(chatId), "json");
+}
+
+/** Load the draft or create an empty one. */
+export async function ensureDraft(env: Env, chatId: number): Promise<Draft> {
+  const existing = await getDraft(env, chatId);
+  if (existing) return existing;
+  const now = Date.now();
+  return {
+    chatId,
+    writeUp: "",
+    media: [],
+    videoLinks: [],
+    imageLinks: [],
+    scraped: null,
+    generated: null,
+    nameOverride: null,
+    slugOverride: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function saveDraft(env: Env, draft: Draft): Promise<void> {
+  draft.updatedAt = Date.now();
+  await env.BOT_KV.put(draftKey(draft.chatId), JSON.stringify(draft), {
+    expirationTtl: DRAFT_TTL_SECONDS,
+  });
+}
+
+export async function deleteDraft(env: Env, chatId: number): Promise<void> {
+  await env.BOT_KV.delete(draftKey(chatId));
+}
+
+/**
+ * Register a Telegram file_id on the media proxy allowlist.
+ * Entries are permanent: persona records reference these IDs indefinitely.
+ */
+export async function registerMedia(
+  env: Env,
+  fileId: string,
+  kind: MediaKind,
+  mime?: string
+): Promise<void> {
+  const record: StoredMedia = { kind, fileId, mime, messageId: 0 };
+  await env.BOT_KV.put(mediaKey(fileId), JSON.stringify(record));
+}
+
+export async function lookupMedia(
+  env: Env,
+  fileId: string
+): Promise<StoredMedia | null> {
+  return env.BOT_KV.get<StoredMedia>(mediaKey(fileId), "json");
+}
+
+/** Append media to a draft while preserving Telegram message ordering. */
+export function appendMedia(draft: Draft, item: StoredMedia): void {
+  draft.media.push(item);
+  draft.media.sort((a, b) => a.messageId - b.messageId);
+  // Regenerating after new material invalidates the old preview.
+  draft.generated = null;
+}
