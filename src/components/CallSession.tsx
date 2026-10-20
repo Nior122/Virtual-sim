@@ -64,6 +64,7 @@ import {
   sanitizeHumanChatOutput,
 } from "../utils/mediaRequest";
 import { evaluateMiniTaskAgent, getRandomMissedOrRejectedCallMessage } from "../utils/taskAgent";
+import { toPlaybackUrl } from "../lib/video/playback";
 import { IncomingCallModal } from "./IncomingCallModal";
 
 interface PendingAttachment {
@@ -550,6 +551,21 @@ export default function CallSession() {
     }
   };
 
+  /**
+   * Every remote video is played through our own Pages Functions
+   * (/api/video-proxy, /api/hls-proxy) so hotlink-protected CDNs, missing CORS
+   * headers and HTML embeds all work. Telegram media stays on /api/media.
+   */
+  const playbackUrlFor = (video: PersonaVideo | null | undefined): string => {
+    if (!video) return "";
+    const stream = (video.streamUrl || "").trim();
+    if (stream.startsWith("/api/")) return stream;
+    const raw = (video.url || stream || "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("/api/")) return raw;
+    return toPlaybackUrl(raw);
+  };
+
   // Programmatic direct stream playback with HLS support for clean, natural video without player UI
   useEffect(() => {
     if (!currentVideo) return;
@@ -566,37 +582,20 @@ export default function CallSession() {
     }
 
     const setupAndPlay = async () => {
-      let playUrl = currentVideo.streamUrl || currentVideo.url;
+      let playUrl = playbackUrlFor(currentVideo);
 
-      // Proxy leakgallery CDN videos through our server to add required Referer header
-      if (playUrl && playUrl.startsWith("https://cdn.leakgallery.com/") && !playUrl.startsWith("/api/video-proxy")) {
-        playUrl = `/api/video-proxy?url=${encodeURIComponent(playUrl)}`;
-      }
-
-      // If it's an embed URL and doesn't have a direct/proxied streamUrl yet, resolve via API
-      if (
-        !currentVideo.streamUrl &&
-        (playUrl.includes("rubyvidhub") || playUrl.includes("embed") || playUrl.includes(".html"))
-      ) {
+      // Safety net for any URL that slipped past the mapping (e.g. an embed
+      // saved before the proxy existed): ask the resolver once.
+      if (!playUrl.startsWith("/api/") && isEmbedVideoUrl(playUrl)) {
         try {
           const res = await fetch(`/api/resolve-video-stream?url=${encodeURIComponent(playUrl)}`);
           if (res.ok) {
             const data = await res.json();
-            if (data.streamUrl) {
-              playUrl = data.streamUrl;
-            }
+            if (data.streamUrl) playUrl = data.streamUrl;
           }
         } catch (e) {
           console.warn("Error resolving video stream:", e);
         }
-      }
-
-      if (
-        playUrl &&
-        !playUrl.startsWith("/api/hls-proxy") &&
-        (playUrl.includes("rubyvidhub") || (playUrl.includes("embed") && playUrl.includes(".html")))
-      ) {
-        playUrl = `/api/hls-proxy?embedUrl=${encodeURIComponent(playUrl)}`;
       }
 
       if (!isMounted || !videoRef.current) return;
@@ -847,6 +846,7 @@ export default function CallSession() {
 
     const randomVideo = candidates[Math.floor(Math.random() * candidates.length)];
     if (!randomVideo) return;
+    setUseIframeFallback(false);
     currentVideoRef.current = randomVideo;
     setCurrentVideo({ ...randomVideo });
 
@@ -1830,7 +1830,9 @@ export default function CallSession() {
                 }`}
               >
                 {currentVideo && (
-                  (isEmbedVideoUrl(currentVideo.url) || useIframeFallback) ? (
+                  ((isEmbedVideoUrl(currentVideo.url) &&
+                    !(currentVideo.streamUrl || "").startsWith("/api/")) ||
+                    useIframeFallback) ? (
                     <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
                       <iframe
                         key={currentVideo.id}

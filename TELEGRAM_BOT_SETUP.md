@@ -213,33 +213,39 @@ In your Telegram bot chat:
 3. Send **photos in order**:
    1st = profile picture, 2nd = cover, next up to 5 = gallery (7 total max).
 4. Send a **short video (under 20 MB)** or paste a direct video URL such as
-   `https://cdn.example.com/clip.mp4` (direct MP4/WebM links work best on
-   Pages — see note below).
+   `https://cdn.example.com/clip.mp4`. Direct MP4/WebM and HLS links both play
+   on Pages through the built-in playback proxy.
 5. Send your **write-up** as ordinary messages, e.g.
    *"24-year-old barista in Toronto, warm and witty, loves jazz and hiking,
    flirty texting style."* Multiple messages combine automatically.
 6. Optional: `/scrape https://example.com/some-profile` — or
    `/scrape https://example.com/some-profile 30 5` to ask for up to 30 videos
-   while following up to 5 paginated pages. Only **JPEG/PNG** images are
-   imported (SVG logos, webp/gif thumbnails, icons and sprites are dropped),
+   while following up to 5 paginated pages. Only **JPEG** images are
+   imported (PNG, SVG logos, webp/gif thumbnails, icons and sprites are
+   dropped),
    and videos are also read out of the page's inline script data, so one call
    usually finds every clip on the listing.
-   - Video count: default 20, maximum 50.
+   - Video count: **all it can find by default (maximum 50)**; pass a smaller
+     number to limit it, e.g. `/scrape <url> 10`.
    - Pages: default 5, hard maximum 10 — each extra page costs another
      subrequest and CPU time inside one Function invocation, and Workers has
      limits on both.
-   - Infinite-scroll or JavaScript-only pagination can't be followed. Scrape
-     the individual page links with separate `/scrape` calls instead; they
-     **merge into the same draft** (duplicate images/videos are removed, page
-     counts add up, the newest title/description wins).
+   - Infinite-scroll or JavaScript-only pagination can't be followed. Paste
+     the individual page links as normal messages instead — every link is
+     scraped and **merged into the same draft** (duplicate images/videos are
+     removed, page counts add up, the newest title/description wins). You can
+     also use `/image <url>` or `/video <url>` to force a direct link in.
 7. `/status` — review what's collected (it shows pages, images and videos
    from scrapes).
-8. `/preview` — the AI writes the full profile (Groq, or OpenRouter if Groq
+8. `/links` — optional: list every image and video URL the draft will use.
+9. `/preview` — the AI writes the full profile (Groq, or OpenRouter if Groq
    is unavailable); use `/setname` or `/setslug` to adjust, then `/preview`
-   again.
-9. `/confirm` — the bot writes the persona and all videos into Neon and
-   replies with the live link `https://YOUR-DOMAIN/dreamgirl/<slug>`.
-10. Open that link, and start a call to confirm the videos play.
+   again. The preview also lists the image URLs and video URLs it will use.
+10. `/confirm` — the bot writes the persona and all videos into Neon and
+    replies with the live link `https://YOUR-DOMAIN/dreamgirl/<slug>` plus the
+    exact image/video URLs it stored. Embed players are resolved to their real
+    stream first; anything with no playable stream is skipped and reported.
+11. Open that link, and start a call to confirm the videos play.
 
 ---
 
@@ -257,7 +263,10 @@ In your Telegram bot chat:
 | Video over 20 MB rejected | Telegram bots can't download bigger files — send it as a direct URL instead. |
 | Embed/HLS video doesn't play on Pages | The Express-only `/api/hls-proxy` route doesn't exist on Pages. Use direct `.mp4`/`.webm` URLs or bot-uploaded files. |
 | `/scrape` says blocked or no data | The page uses a browser/Cloudflare challenge or renders only in JavaScript, which a Worker can't load. Send the media and write-up manually. |
-| `/scrape` returns few images | Only JPEG/PNG photos are imported; SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. |
+| `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. |
+| A copied image link is refused | The bot only accepts `.jpg/.jpeg`. Convert the file to JPEG and send it again. |
+| Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
+| Video shows a black frame / never starts | The call screen plays remote videos through `/api/video-proxy` and `/api/hls-proxy`; check Pages → Observability → Functions logs for a 4xx/5xx from those routes. Sources that never expose a real stream (login-walled players) cannot be resolved. |
 | `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |
 | `/scrape` misses an infinite-scroll gallery | A Worker can't scroll or run the page's JavaScript. Copy the individual page links and `/scrape` them one by one. |
 | Variable changes seem ignored | Variables load only on a fresh deploy: **Deployments → ⋯ → Retry deployment**. |

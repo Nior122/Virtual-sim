@@ -1,5 +1,6 @@
 import type { Env } from "../../../src/lib/bot/types";
 import { getPublicPersonaBySlug } from "../../../src/lib/db/neon";
+import { toPlaybackUrl } from "../../../src/lib/video/playback";
 
 /**
  * Single public persona with its videos, read directly from Neon.
@@ -29,6 +30,18 @@ export async function onRequestGet({
         headers: { "Content-Type": "application/json" },
       });
     }
+    // Every remote video is played through our own Pages Function so
+    // hotlink-protected CDNs, missing CORS headers and HTML embeds all work
+    // on the call screen. Telegram media (/api/media/...) is left untouched.
+    if (Array.isArray((persona as any).videos)) {
+      (persona as any).videos = (persona as any).videos.map(
+        (video: { url?: string; streamUrl?: string }) => ({
+          ...video,
+          streamUrl: toPlaybackUrl(video.url || video.streamUrl),
+        })
+      );
+    }
+
     return new Response(JSON.stringify(persona), {
       headers: {
         "Content-Type": "application/json",

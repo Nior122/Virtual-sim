@@ -8,10 +8,10 @@ const BROWSER_UA =
 // ---------------------------------------------------------------------------
 // Media URL classifiers
 // ---------------------------------------------------------------------------
-// Profile photos are JPEG/PNG only: webp/gif are often thumbnails, and SVG
-// files are site chrome that would end up as broken persona images.
-const PHOTO_RE = /\.(jpe?g|png)(\?|#|$)/i;
-const PHOTO_QUERY_RE = /[?&](?:fm|format|f)=(?:jpe?g|png)(&|#|$)/i;
+// Profile photos are JPEG only: PNG/WebP/GIF are often thumbnails, SVG files
+// are site chrome, and the persona pipeline wants one predictable format.
+const PHOTO_RE = /\.jpe?g(\?|#|$)/i;
+const PHOTO_QUERY_RE = /[?&](?:fm|format|f)=jpe?g(&|#|$)/i;
 const SVG_RE = /\.svg(\?|#|$)/i;
 const VIDEO_RE = /\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i;
 const EMBED_RE = /(embed|rubyvidhub|\.html|m3u8)/i;
@@ -21,7 +21,8 @@ const JUNK_IMG_RE =
 // ---------------------------------------------------------------------------
 // Scrape limits
 // ---------------------------------------------------------------------------
-export const DEFAULT_VIDEO_LIMIT = 20;
+/** How many videos a scrape collects when the caller does not ask for a count. */
+export const DEFAULT_VIDEO_LIMIT = 50;
 export const MAX_VIDEO_LIMIT = 50;
 export const DEFAULT_MAX_PAGES = 5;
 export const HARD_MAX_PAGES = 10;
@@ -35,7 +36,7 @@ export interface ScrapeOptions {
   maxPages?: number;
 }
 
-/** True for JPEG/PNG URLs (including format= query params), never SVG. */
+/** True for JPEG URLs (including format= query params) and nothing else. */
 export function isPhotoUrl(url: string): boolean {
   if (!url) return false;
   if (SVG_RE.test(url)) return false;
