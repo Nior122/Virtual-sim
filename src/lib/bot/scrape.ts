@@ -41,6 +41,12 @@ export interface ScrapeOptions {
   videoLimit?: number;
   imageLimit?: number;
   maxPages?: number;
+  /** Set false to skip image work (video-only scrapes in bulk mode) */
+  images?: boolean;
+  /** Set false to skip video work (image-only scrapes in bulk mode) */
+  videos?: boolean;
+  /** Cap on image content-type probes (Workers subrequest budget) */
+  maxImageChecks?: number;
   /**
    * How many post/detail pages to open because many sites only expose the
    * real image after clicking a thumbnail. 0 disables detail crawling.
@@ -391,18 +397,20 @@ export async function isJpegResponse(
 export async function resolveImageCandidates(
   candidates: string[],
   limit: number,
-  referer: string
+  referer: string,
+  maxChecks = MAX_IMAGE_CHECKS
 ): Promise<{ images: string[]; checked: number; rejected: number }> {
   const images: string[] = [];
   let checked = 0;
   let rejected = 0;
+  const checkBudget = Math.max(0, Math.min(maxChecks, MAX_IMAGE_CHECKS));
   for (const url of candidates) {
     if (images.length >= limit) break;
     if (isPhotoUrl(url)) {
       images.push(url);
       continue;
     }
-    if (checked >= MAX_IMAGE_CHECKS) break;
+    if (checked >= checkBudget) break;
     checked += 1;
     if (await isJpegResponse(url, referer)) images.push(url);
     else rejected += 1;
@@ -686,6 +694,10 @@ export async function scrapeProfile(
     0,
     HARD_MAX_DETAIL_PAGES
   );
+  // Bulk mode scrapes images from one URL and videos from another, so each
+  // half can be switched off to save subrequests.
+  const wantImages = options.images !== false;
+  const wantVideos = options.videos !== false;
 
   let parsedUrl: URL;
   try {
@@ -750,15 +762,18 @@ export async function scrapeProfile(
     // 1 + 2 + 3) Images: OpenGraph, JSON-LD, <img>/<source> (incl. srcset and
     // lazy-load attributes) and full-size image links. Candidates are only
     // resolved to JPEGs after the crawl, with content-type probes.
-    const pageImages = collectImageGroups(html, pageUrl);
-    for (const candidate of pageImages.primary) {
-      uniquePush(primaryCandidates, candidate, 40);
-    }
-    for (const candidate of pageImages.secondary) {
-      uniquePush(listingCandidates, candidate, 40);
+    if (wantImages) {
+      const pageImages = collectImageGroups(html, pageUrl);
+      for (const candidate of pageImages.primary) {
+        uniquePush(primaryCandidates, candidate, 40);
+      }
+      for (const candidate of pageImages.secondary) {
+        uniquePush(listingCandidates, candidate, 40);
+      }
     }
 
     // Videos: OpenGraph, JSON-LD, tags and inline script JSON.
+    if (wantVideos) {
     const ogVideo =
       readMetaPair(html, "og:video") || readMetaPair(html, "og:video:url");
     if (ogVideo) uniquePush(videos, absoluteUrl(ogVideo, pageUrl), videoLimit);
@@ -793,13 +808,14 @@ export async function scrapeProfile(
     for (const scripted of extractVideosFromScripts(html, pageUrl, videoLimit)) {
       uniquePush(videos, scripted, videoLimit);
     }
+    }
 
     // 4) Open the individual post pages: many sites keep the real image (and
     //    extra clips) behind a thumbnail that only appears on the detail page.
-    if (
-      detailPagesScanned < detailPages &&
-      primaryCandidates.length + detailCandidates.length < 40
-    ) {
+    const wantMoreImages =
+      wantImages && primaryCandidates.length + detailCandidates.length < 40;
+    const wantMoreVideos = wantVideos && videos.length < videoLimit;
+    if (detailPagesScanned < detailPages && (wantMoreImages || wantMoreVideos)) {
       const detailLinks = collectDetailLinks(html, pageUrl, visited).filter(
         (link) => !detailLinksTried.has(link)
       );
@@ -816,25 +832,31 @@ export async function scrapeProfile(
         detailPagesScanned += 1;
         visited.add(link);
         sourceUrls.push(link);
-        const detailImages = collectImageGroups(detailHtml, link);
-        for (const candidate of detailImages.primary) {
-          uniquePush(detailCandidates, candidate, 40);
+        if (wantMoreImages) {
+          const detailImages = collectImageGroups(detailHtml, link);
+          for (const candidate of detailImages.primary) {
+            uniquePush(detailCandidates, candidate, 40);
+          }
+          for (const candidate of detailImages.secondary) {
+            uniquePush(detailCandidates, candidate, 40);
+          }
         }
-        for (const candidate of detailImages.secondary) {
-          uniquePush(detailCandidates, candidate, 40);
+        if (wantMoreVideos) {
+          for (const scripted of extractVideosFromScripts(
+            detailHtml,
+            link,
+            videoLimit
+          )) {
+            uniquePush(videos, scripted, videoLimit);
+          }
+          const detailVideo =
+            readMetaPair(detailHtml, "og:video") ||
+            readMetaPair(detailHtml, "og:video:url");
+          const detailVideoUrl = detailVideo
+            ? absoluteUrl(detailVideo, link)
+            : null;
+          if (detailVideoUrl) uniquePush(videos, detailVideoUrl, videoLimit);
         }
-        for (const scripted of extractVideosFromScripts(
-          detailHtml,
-          link,
-          videoLimit
-        )) {
-          uniquePush(videos, scripted, videoLimit);
-        }
-        const detailVideo =
-          readMetaPair(detailHtml, "og:video") ||
-          readMetaPair(detailHtml, "og:video:url");
-        const detailVideoUrl = detailVideo ? absoluteUrl(detailVideo, link) : null;
-        if (detailVideoUrl) uniquePush(videos, detailVideoUrl, videoLimit);
       }
     }
 
@@ -856,19 +878,22 @@ export async function scrapeProfile(
   }
 
   const orderedCandidates: string[] = [];
-  for (const candidate of [
-    ...primaryCandidates,
-    ...detailCandidates,
-    ...listingCandidates,
-  ]) {
-    if (orderedCandidates.length >= 40) break;
-    if (!orderedCandidates.includes(candidate)) orderedCandidates.push(candidate);
+  if (wantImages) {
+    for (const candidate of [
+      ...primaryCandidates,
+      ...detailCandidates,
+      ...listingCandidates,
+    ]) {
+      if (orderedCandidates.length >= 40) break;
+      if (!orderedCandidates.includes(candidate)) orderedCandidates.push(candidate);
+    }
   }
 
-  const { images, rejected } = await resolveImageCandidates(
+  const { images, rejected, checked } = await resolveImageCandidates(
     orderedCandidates,
     imageLimit,
-    startUrl
+    startUrl,
+    options.maxImageChecks
   );
 
   if (!title && !description && images.length === 0 && videos.length === 0) {
@@ -887,6 +912,7 @@ export async function scrapeProfile(
     pagesScanned,
     sourceUrls,
     imageCandidates: orderedCandidates.length,
+    imageChecks: checked,
     imagesRejected: rejected,
     detailPagesScanned,
   };

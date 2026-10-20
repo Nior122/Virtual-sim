@@ -10,12 +10,24 @@ import type {
 import { MAX_GALLERY, MAX_IMAGES, TELEGRAM_DOWNLOAD_LIMIT_MB } from "./types";
 import { sendMessage } from "./telegram";
 import {
+  clearBulkQueue,
   deleteDraft,
   ensureDraft,
+  getBulkQueue,
   getDraft,
   registerMedia,
+  saveBulkQueue,
   saveDraft,
 } from "./store";
+import type { BulkQueue } from "./store";
+import {
+  MAX_BULK_ENTRIES,
+  MAX_BULK_PER_CALL,
+  parseBulkList,
+  runBulkEntry,
+  type BulkResult,
+} from "./bulk";
+import type { BulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
 import {
   isDirectVideoUrl,
@@ -25,6 +37,7 @@ import {
   isPlayableVideoUrl,
 } from "../video/playback";
 import { resolveStreamUrl } from "../video/resolve";
+import { newPlaybackBudget, toPlayableVideoUrl } from "./videos";
 import {
   DEFAULT_DETAIL_PAGES,
   DEFAULT_MAX_PAGES,
@@ -112,6 +125,9 @@ Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
 /profiles [page] — every profile with its slug, image count and video count
+/bulk <list> — scrape up to 25 pages at once and create a profile from each
+  separate entries with commas or newlines; "A & B" takes images from A and
+  videos from B; a single URL gives both. Then /bulknext continues the queue
 /edit <slug> — load an existing profile to change its images and videos
   then: send photos/videos or links (they are added), or use
   /removeimage <n>, /replaceimage <n> <url>, /removevideo <n>,
@@ -390,6 +406,7 @@ async function handleCommand(
       draft.scraped = null;
       draft.generated = null;
       draft.edit = null;
+      draft.bulkAwaiting = false;
       draft.nameOverride = null;
       draft.slugOverride = null;
       await saveDraft(env, draft);
@@ -677,6 +694,58 @@ async function handleCommand(
           `The call screen proxies every video, so playable ones start even when the source blocks hotlinking.`
       );
       await sendMessage(env, chatId, lines.join("\n"));
+      return;
+    }
+
+    case "/bulk": {
+      if (!arg) {
+        const draft = await ensureDraft(env, chatId);
+        draft.bulkAwaiting = true;
+        await saveDraft(env, draft);
+        await sendMessage(
+          env,
+          chatId,
+          `Bulk generation\n` +
+            `Send your list in the next message, one entry per line or separated by commas.\n\n` +
+            `• https://site.com/profile            → images and videos from that page\n` +
+            `• https://site.com/p & https://site.com/videos → images from the first, videos from the second\n` +
+            `• images: https://…  videos: https://…        → same thing with labels\n\n` +
+            `Up to ${MAX_BULK_ENTRIES} entries. Each entry becomes its own profile.\n` +
+            `Links to your own site (/dreamgirl/<slug>) are read from the database.\n` +
+            `Cancel with /bulkcancel.`
+        );
+        return;
+      }
+      await startBulk(env, origin, chatId, arg);
+      return;
+    }
+
+    case "/bulknext": {
+      const queue = await getBulkQueue(env, chatId);
+      if (!queue || queue.entries.length === 0) {
+        await clearBulkQueue(env, chatId);
+        await sendMessage(env, chatId, "No queued bulk entries left. Send /bulk to start a new batch.");
+        return;
+      }
+      await processBulkQueue(env, origin, chatId, queue);
+      return;
+    }
+
+    case "/bulkcancel": {
+      const queue = await getBulkQueue(env, chatId);
+      await clearBulkQueue(env, chatId);
+      const pending = await getDraft(env, chatId);
+      if (pending?.bulkAwaiting) {
+        pending.bulkAwaiting = false;
+        await saveDraft(env, pending);
+      }
+      await sendMessage(
+        env,
+        chatId,
+        queue && queue.entries.length > 0
+          ? `Bulk batch cancelled — ${queue.entries.length} entr${queue.entries.length === 1 ? "y was" : "ies were"} still queued.`
+          : "No bulk batch to cancel."
+      );
       return;
     }
 
@@ -1016,6 +1085,138 @@ async function getExistingDraft(
   return draft;
 }
 
+// ---------------------------------------------------------------------------
+// Bulk generation: parse a list, then process as much as one invocation allows
+// ---------------------------------------------------------------------------
+/** Rough subrequest ceiling per webhook call (Workers limit is 50). */
+const BULK_SUBREQUEST_BUDGET = 40;
+
+function formatBulkResults(results: BulkResult[]): string[] {
+  return results.map((result, index) => {
+    const number = index + 1;
+    if (!result.ok) {
+      return `${number}. ✗ ${result.raw}\n   ${result.error || "failed"}`;
+    }
+    const bits = [
+      `${result.images ?? 0} image(s)`,
+      `${result.videos ?? 0} video(s)`,
+    ];
+    if (result.skippedVideos) bits.push(`${result.skippedVideos} video(s) skipped`);
+    if (result.usedFallbackText) bits.push("text fallback");
+    return (
+      `${number}. ✓ ${result.name} — slug: ${result.slug}\n` +
+      `   ${bits.join(" · ")}\n` +
+      `   ${result.link}`
+    );
+  });
+}
+
+/** Send a long report in Telegram-sized pieces. */
+async function sendLong(env: Env, chatId: number, text: string): Promise<void> {
+  const limit = 3800;
+  if (text.length <= limit) {
+    await sendMessage(env, chatId, text);
+    return;
+  }
+  let rest = text;
+  while (rest.length > 0) {
+    let cut = rest.lastIndexOf("\n", limit);
+    if (cut <= 0) cut = limit;
+    await sendMessage(env, chatId, rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\n+/, "");
+  }
+}
+
+async function startBulk(
+  env: Env,
+  origin: string,
+  chatId: number,
+  input: string
+): Promise<void> {
+  const { entries, skipped, overflow } = parseBulkList(input);
+  if (entries.length === 0) {
+    await sendMessage(
+      env,
+      chatId,
+      "I could not find any URLs in that list.\n" +
+        "Send it as: https://site/a, https://site/b & https://site/b-videos"
+    );
+    return;
+  }
+
+  const queue: BulkQueue = {
+    entries,
+    createdAt: Date.now(),
+    done: 0,
+    failed: 0,
+  };
+  const notes: string[] = [];
+  if (skipped.length > 0) {
+    notes.push(`${skipped.length} line(s) had no usable URL and were skipped.`);
+  }
+  if (overflow > 0) {
+    notes.push(`Only the first ${MAX_BULK_ENTRIES} entries were kept.`);
+  }
+
+  await saveBulkQueue(env, chatId, queue);
+  await sendMessage(
+    env,
+    chatId,
+    `Bulk generation: ${entries.length} entr${entries.length === 1 ? "y" : "ies"} queued.\n` +
+      entries
+        .slice(0, 5)
+        .map((entry, index) =>
+          entry.imageSource === entry.videoSource
+            ? `${index + 1}. ${entry.imageSource}`
+            : `${index + 1}. images ${entry.imageSource} · videos ${entry.videoSource}`
+        )
+        .join("\n") +
+      (entries.length > 5 ? `\n…and ${entries.length - 5} more` : "") +
+      (notes.length > 0 ? `\n\n${notes.join("\n")}` : "") +
+      `\n\nWorking through them now…`
+  );
+  await processBulkQueue(env, origin, chatId, queue);
+}
+
+async function processBulkQueue(
+  env: Env,
+  origin: string,
+  chatId: number,
+  queue: BulkQueue
+): Promise<void> {
+  const batch: BulkResult[] = [];
+  let spent = 0;
+
+  while (
+    queue.entries.length > 0 &&
+    batch.length < MAX_BULK_PER_CALL &&
+    (batch.length === 0 || spent < BULK_SUBREQUEST_BUDGET)
+  ) {
+    const entry = queue.entries.shift() as BulkEntry;
+    const result = await runBulkEntry(env, origin, entry);
+    spent += result.subrequests;
+    if (result.ok) queue.done += 1;
+    else queue.failed += 1;
+    batch.push(result);
+  }
+
+  const remaining = queue.entries.length;
+  if (remaining > 0) await saveBulkQueue(env, chatId, queue);
+  else await clearBulkQueue(env, chatId);
+
+  const header =
+    `Bulk results (${batch.length})` +
+    (queue.done + queue.failed > batch.length
+      ? ` — batch total: ${queue.done} created, ${queue.failed} failed`
+      : "");
+  const footer =
+    remaining > 0
+      ? `\n\n${remaining} entr${remaining === 1 ? "y" : "ies"} left in the queue — send /bulknext to continue.`
+      : `\n\nQueue finished. /profiles lists everything; /edit <slug> changes images or videos.`;
+
+  await sendLong(env, chatId, `${header}\n\n${formatBulkResults(batch).join("\n\n")}${footer}`);
+}
+
 /**
  * Edit mode: apply the draft's images and videos to the profile loaded with
  * /edit. Images rewrite the profile/cover/gallery columns; video rows are
@@ -1049,21 +1250,11 @@ async function runSave(env: Env, origin: string, chatId: number): Promise<void> 
   const requested = workingVideos(env, origin, draft);
   const videos: WorkingVideo[] = [];
   let unresolved = 0;
-  let embedAttempts = 0;
+  const budget = newPlaybackBudget(8);
   for (const video of requested) {
-    if (isPlayableVideoUrl(video.url)) {
-      videos.push(video);
-      continue;
-    }
-    if (isEmbedUrl(video.url) && embedAttempts < 8) {
-      embedAttempts += 1;
-      const resolved = await resolveStreamUrl(video.url, 6000);
-      if (resolved && (isPlayableVideoUrl(resolved) || isDirectVideoUrl(resolved))) {
-        videos.push({ ...video, url: resolved });
-        continue;
-      }
-    }
-    unresolved += 1;
+    const url = await toPlayableVideoUrl(video.url, budget);
+    if (url) videos.push({ ...video, url });
+    else unresolved += 1;
   }
   const cappedVideos = videos.slice(0, MAX_VIDEOS);
 
@@ -1278,21 +1469,16 @@ async function resolveVideos(
   const candidates = collectVideoCandidates(env, origin, draft);
   const playable: ResolvedVideo[] = [];
   let unresolved = 0;
-  let embedAttempts = 0;
+  const budget = newPlaybackBudget(8);
 
   for (const candidate of candidates) {
-    if (isPlayableVideoUrl(candidate.url)) {
-      playable.push(candidate);
-      continue;
-    }
     // Bound the extra network work inside one webhook call.
-    if (isEmbedUrl(candidate.url) && embedAttempts < 8) {
-      embedAttempts += 1;
-      const resolved = await resolveStreamUrl(candidate.url, 6000);
-      if (resolved && (isPlayableVideoUrl(resolved) || isDirectVideoUrl(resolved))) {
-        playable.push({ ...candidate, url: resolved });
-        continue;
+    const url = await toPlayableVideoUrl(candidate.url, budget);
+    if (url) {
+      if (!playable.some((video) => video.url === url)) {
+        playable.push({ ...candidate, url });
       }
+      continue;
     }
     unresolved += 1;
   }
@@ -1562,10 +1748,31 @@ export async function handleUpdate(
   const msg = update.message || update.edited_message;
   if (!msg || !msg.chat) return;
 
+  const chatId = msg.chat.id;
   const text = (msg.text || msg.caption || "").trim();
   if (text.startsWith("/")) {
     await handleCommand(env, requestOrigin, msg, text);
     return;
   }
+
+  // A /bulk with no list waits for the next message to be the list.
+  const draft = await getDraft(env, chatId);
+  if (draft?.bulkAwaiting && /https?:\/\//i.test(text)) {
+    draft.bulkAwaiting = false;
+    await saveDraft(env, draft);
+    await startBulk(env, requestOrigin, chatId, text);
+    return;
+  }
+  if (draft?.bulkAwaiting) {
+    draft.bulkAwaiting = false;
+    await saveDraft(env, draft);
+    await sendMessage(
+      env,
+      chatId,
+      "That did not contain any links. Nothing was generated — send /bulk again when you have your list."
+    );
+    return;
+  }
+
   await handleIntake(env, requestOrigin, msg, text);
 }

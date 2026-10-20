@@ -59,6 +59,36 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/links` — list every image and video URL currently in the draft
 - `/profiles [page]` — every profile with its slug plus image and video counts
   (20 per page), e.g. `Ava — slug: ava · 5 image(s) · 12 video(s)`
+- `/bulk <list>` — scrape many pages at once and create one profile per entry
+  (see below); `/bulknext` continues a queued batch, `/bulkcancel` drops it
+
+### Bulk generation
+
+```
+/bulk
+https://site.com/ava
+https://site.com/mia & https://site.com/mia/videos
+images: https://site.com/zoe  videos: https://site.com/zoe/clips
+```
+
+- `/bulk` on its own waits for the next message, so a long list can be pasted
+  as-is. `/bulk <list>` works in one message too.
+- **Separators:** newline, comma, semicolon or `|` between entries. A separator
+  only splits when a URL follows it, so `?a=1&b=2` query strings are safe.
+- **One URL per entry** → images *and* videos are scraped from that page.
+- **`A & B`** (or `images: A videos: B`) → images from A, videos from B.
+- Up to **25 entries** per batch; they are processed 6 at a time within a
+  subrequest budget, and the reply says how many are left. Send `/bulknext` to
+  continue, `/bulkcancel` to stop.
+- Links to **your own site** (`/dreamgirl/<slug>`, `/call/<slug>`) are read
+  straight from Neon instead of being scraped, because the site renders in the
+  browser.
+- Each entry is reported as:
+  `1. ✓ Ava — slug: ava` / `5 image(s) · 12 video(s)` / the live link, or
+  `2. ✗ https://… — no JPEG images found`.
+- If the AI provider is unavailable, the profile is still created from the
+  scraped title/description and marked `text fallback` — run `/edit` or
+  regenerate that profile later.
 - `/checkvideos <slug>` — probe an existing profile's stored video URLs and
   report which ones have a real playable stream (read-only)
 

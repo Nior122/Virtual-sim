@@ -126,6 +126,21 @@ export interface ScrapedProfile {
   imagesRejected?: number;
   /** Individual post pages opened to reach hidden main images/videos */
   detailPagesScanned?: number;
+  /** Content-type probes spent verifying extensionless image URLs */
+  imageChecks?: number;
+}
+
+/**
+ * One line of a bulk generation list: a profile page, or an image source and
+ * a separate video source separated by "&" / labels.
+ */
+export interface BulkEntry {
+  /** The entry exactly as the user typed it */
+  raw: string;
+  /** Where images come from (equal to videoSource when only one URL was given) */
+  imageSource: string;
+  /** Where videos come from */
+  videoSource: string;
 }
 
 export interface PersonaDraft {
@@ -175,6 +190,8 @@ export interface Draft {
   generated?: PersonaDraft | null;
   /** Set when this draft edits an existing profile instead of creating one */
   edit?: DraftEditState | null;
+  /** True right after /bulk with no list: the next message is the bulk list */
+  bulkAwaiting?: boolean;
   /** Manual overrides applied on top of Groq output */
   nameOverride?: string | null;
   slugOverride?: string | null;

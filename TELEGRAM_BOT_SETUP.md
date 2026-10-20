@@ -251,6 +251,22 @@ In your Telegram bot chat:
     stream first; anything with no playable stream is skipped and reported.
 11. Open that link, and start a call to confirm the videos play.
 
+### Creating several profiles at once (bulk)
+
+1. Send `/bulk` (the bot waits for your list) — or `/bulk <list>` directly.
+2. Paste one entry per line, or separate entries with commas:
+   ```
+   https://site.com/ava
+   https://site.com/mia & https://site.com/mia/videos
+   ```
+   One URL per entry means images **and** videos come from it. `A & B` means
+   images from A and videos from B (`images: … videos: …` also works).
+3. The bot creates a profile per entry and replies with the results. If the
+   batch is long it stops after a few entries — send `/bulknext` to continue,
+   or `/bulkcancel` to stop.
+4. Up to 25 entries per batch. Profiles are created immediately; `/profiles`
+   lists them and `/edit <slug>` fixes any of them.
+
 ### Changing a profile later (add / replace / delete media)
 
 1. `/edit <slug>` — the bot replies with the current images and videos,
@@ -283,6 +299,8 @@ In your Telegram bot chat:
 | `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. The reply says how many image URLs were seen and rejected. Raise the post-page count (`/scrape <url> 50 5 6`) if the images sit inside posts. |
 | `/scrape` finds no images at all | The page may serve only WebP/PNG (convert or use `/image <jpeg url>`), or the main image is behind JavaScript. Try increasing post pages. |
 | A copied image link is refused | The bot only accepts `.jpg/.jpeg`. Convert the file to JPEG and send it again. |
+| `/bulk` skips an entry | That page had no JPEG images (the reply says how many image URLs were seen but not served as JPEG). Add `& <video page>` or use `/edit` after creating. |
+| Bulk stopped halfway | Only a few entries fit in one webhook call — send `/bulknext` to process the rest of the queue. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
 | `/save` removed videos I wanted | `/save` deletes video rows you removed with `/removevideo`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
