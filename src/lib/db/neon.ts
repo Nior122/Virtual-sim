@@ -197,6 +197,117 @@ export async function createVideoRecord(
   return rows[0] as { id: string };
 }
 
+// --- Edits to an existing profile (media only) -----------------------------
+
+export interface PersonaMediaForEdit {
+  id: string;
+  slug: string;
+  name: string;
+  profileImage: string | null;
+  coverImage: string | null;
+  gallery: string | null;
+}
+
+/** Loads the media columns of an active persona for the bot's edit mode. */
+export async function getPersonaMediaForEdit(
+  env: Env,
+  slug: string
+): Promise<PersonaMediaForEdit | null> {
+  const sql = sqlFor(env);
+  const rows = await sql.query(
+    `SELECT "id", "slug", "name", "profileImage", "coverImage", "gallery"
+       FROM "Persona"
+      WHERE lower("slug") = lower($1) AND "active" = true
+      LIMIT 1`,
+    [slug]
+  );
+  return (rows[0] as PersonaMediaForEdit) || null;
+}
+
+/** Replaces the three image columns of an existing persona. */
+export async function updatePersonaMediaColumns(
+  env: Env,
+  personaId: string,
+  media: {
+    profileImage: string | null;
+    coverImage: string | null;
+    gallery: string[];
+  }
+): Promise<{ id: string }> {
+  const sql = sqlFor(env);
+  const now = new Date().toISOString();
+  const rows = await sql.query(
+    `UPDATE "Persona"
+        SET "profileImage" = $2, "coverImage" = $3, "gallery" = $4, "updatedAt" = $5
+      WHERE "id" = $1
+      RETURNING "id"`,
+    [
+      personaId,
+      media.profileImage,
+      media.coverImage,
+      media.gallery.join(","),
+      now,
+    ]
+  );
+  return rows[0] as { id: string };
+}
+
+export interface PersonaVideoRow {
+  id: string;
+  url: string;
+  title: string;
+}
+
+/** Every active video row of a persona, in creation order. */
+export async function listPersonaVideos(
+  env: Env,
+  personaId: string
+): Promise<PersonaVideoRow[]> {
+  const sql = sqlFor(env);
+  return (await sql.query(
+    `SELECT "id", "url", "title"
+       FROM "PersonaVideo"
+      WHERE "personaId" = $1 AND "active" = true
+      ORDER BY "createdAt" ASC`,
+    [personaId]
+  )) as PersonaVideoRow[];
+}
+
+/** Deletes one video row, scoped to the persona that owns it. */
+export async function deletePersonaVideo(
+  env: Env,
+  personaId: string,
+  videoId: string
+): Promise<boolean> {
+  const sql = sqlFor(env);
+  const rows = await sql.query(
+    `DELETE FROM "PersonaVideo"
+      WHERE "id" = $1 AND "personaId" = $2
+      RETURNING "id"`,
+    [videoId, personaId]
+  );
+  return rows.length > 0;
+}
+
+/** Points an existing video row at a new URL/title. */
+export async function updatePersonaVideo(
+  env: Env,
+  personaId: string,
+  videoId: string,
+  input: { url: string; title: string }
+): Promise<boolean> {
+  const sql = sqlFor(env);
+  const now = new Date().toISOString();
+  const rows = await sql.query(
+    `UPDATE "PersonaVideo"
+        SET "url" = $3, "title" = $4, "updatedAt" = $5
+      WHERE "id" = $1 AND "personaId" = $2
+      RETURNING "id"`,
+    [videoId, personaId, input.url, input.title, now]
+  );
+  return rows.length > 0;
+}
+
 // --- Reads used by the public Pages Functions ------------------------------
 
 export async function listPublicPersonas(env: Env): Promise<any[]> {

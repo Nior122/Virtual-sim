@@ -56,6 +56,29 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/links` — list every image and video URL currently in the draft
 - `/checkvideos <slug>` — probe an existing profile's stored video URLs and
   report which ones have a real playable stream (read-only)
+
+### Editing an existing profile
+
+```
+/edit ava                     # or /edit https://<site>/dreamgirl/ava
+send photos / videos / links  # new material is appended to the profile
+/replaceimage 2 https://…/cover.jpg
+/removevideo 3
+/clearvideos
+/save                         # write the changes to Neon
+```
+
+- `/removeimage <n>`, `/replaceimage <n> <url>`, `/removevideo <n>`,
+  `/replacevideo <n> <url>` work on the same 1-based numbering that `/links`
+  shows, so you can always see exactly what you are changing.
+- Anything you send while editing (`/scrape`, a pasted profile link, a direct
+  video/JPEG URL, an uploaded photo or video file) is appended to the loaded
+  profile instead of starting a new draft.
+- `/save` rewrites `profileImage`/`coverImage`/`gallery` and diffs the
+  `PersonaVideo` rows: kept rows are updated in place, missing ones deleted,
+  new ones inserted. Embed players are resolved to their real stream first.
+- `/preview` in edit mode only lists what `/save` would write (text fields are
+  not touched); `/cancel` throws the edit away without changing the profile.
 - `/preview` — Groq writes the full profile; shows the summary
 - `/setname <name>`, `/setslug <slug>` — override generated values
 - `/status` — inspect the current draft
@@ -119,6 +142,10 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - **Bot profile writing falls back to OpenRouter.** With both keys set, Groq is
   tried first and OpenRouter is used automatically if it is missing, errors,
   or returns unusable JSON.
+- **Existing profiles are edited in place.** `/edit <slug>` loads a published
+  profile's media into a draft; `/save` applies the diff (images rewritten,
+  video rows updated/deleted/inserted) without touching text fields, the slug
+  or the persona's id.
 - **Everything lands in one draft until `/confirm`.** Photos, videos, video
   URLs and pasted links all accumulate in the same per-chat draft; adding
   material after `/preview` simply invalidates the preview so you can

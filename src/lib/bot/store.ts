@@ -21,6 +21,7 @@ export async function ensureDraft(env: Env, chatId: number): Promise<Draft> {
     imageLinks: [],
     scraped: null,
     generated: null,
+    edit: null,
     nameOverride: null,
     slugOverride: null,
     createdAt: now,

@@ -89,6 +89,21 @@ export interface VideoLink {
   url: string;
   title?: string;
   messageId: number;
+  /** Existing PersonaVideo row this link came from (edit mode only) */
+  videoId?: string;
+}
+
+/**
+ * State for editing an already-published profile. While a draft has `edit`
+ * set, /save writes the draft's media back to that persona instead of
+ * creating a new one.
+ */
+export interface DraftEditState {
+  personaId: string;
+  slug: string;
+  name: string;
+  /** Video rows that existed when the edit started (missing ones are deleted) */
+  originalVideos: Array<{ id: string; url: string; title: string }>;
 }
 
 export type DraftVideo = StoredMedia | VideoLink;
@@ -152,6 +167,8 @@ export interface Draft {
   imageLinks: string[];
   scraped?: ScrapedProfile | null;
   generated?: PersonaDraft | null;
+  /** Set when this draft edits an existing profile instead of creating one */
+  edit?: DraftEditState | null;
   /** Manual overrides applied on top of Groq output */
   nameOverride?: string | null;
   slugOverride?: string | null;
