@@ -39,13 +39,15 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 | 3rd–7th photo (up to 5) | `gallery` (comma-separated URLs) |
 | Video files / video URLs / scraped videos | `PersonaVideo` rows → the call screen |
 | Write-up text (+ scraped text) | Groq-generated `description`, bios, `personality`, `background`, `interests`, `speakingStyle`, `flirtLevel`, `systemPrompt`, etc. |
-| `/scrape <url>` | Best-effort extraction of title, description, images and videos from a public page |
+| `/scrape <url> [video count] [max pages]` | Best-effort extraction of title, description, JPEG/PNG images and videos (including paginated pages) from a public profile |
 
 ## Chat commands
 
 - `/newprofile` — start a fresh draft
 - send photos, videos, video URLs, and write-up text in any order
 - `/scrape https://example.com/profile` — pull reference data from a page
+- `/scrape https://example.com/profile 30 5` — ask for up to 30 videos across
+  up to 5 paginated pages (video count max 50, pages default 5, hard max 10)
 - `/preview` — Groq writes the full profile; shows the summary
 - `/setname <name>`, `/setslug <slug>` — override generated values
 - `/status` — inspect the current draft
@@ -60,8 +62,10 @@ Set in Pages → project → Settings → Environment variables (Production):
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | BotFather token |
 | `TELEGRAM_WEBHOOK_SECRET` | Random string, also passed to `setWebhook` |
-| `GROQ_API_KEY` | Groq key |
+| `GROQ_API_KEY` | Groq key (optional when OpenRouter is set) |
 | `GROQ_MODEL` | Optional, defaults to `llama-3.3-70b-versatile` |
+| `OPENROUTER_API_KEY` | Optional OpenRouter key — automatic fallback writer |
+| `OPENROUTER_MODEL` | Optional, defaults to `meta-llama/llama-3.3-70b-instruct` |
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `PUBLIC_BASE_URL` | Public Pages URL (optional; falls back to request origin) |
 
@@ -86,6 +90,26 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - **Scraping is best-effort.** Workers cannot run a headless browser, so pages
   behind Cloudflare browser checks or pure-JavaScript SPAs return a clear
   error. Static HTML, OpenGraph tags and JSON-LD work well.
+- **Only JPEG/PNG images are imported.** WebP/GIF thumbnails, SVG logos and
+  icons, sprites, favicons and placeholder graphics are discarded, so a
+  scrape returns the real profile photos and nothing else.
+- **Video URLs are also read from inline script JSON** (`window.__DATA__` and
+  similar state blobs), which is where most sites keep their clip URLs. That
+  is why one scrape can now find many videos instead of only the OpenGraph
+  one.
+- **Pagination is followed up to a hard cap.** `/scrape <url> <videos> <pages>`
+  follows `rel="next"`, "Next/Older/More" links and numbered pagination.
+  Pages default to 5 and the hard maximum is 10: every extra page is another
+  subrequest and more CPU time in a single invocation, and the free Workers
+  plan has strict limits on both.
+- **Some pagination cannot be followed.** Infinite scroll and pagination that
+  only exists after JavaScript runs cannot be crawled by a Worker. Scrape the
+  individual page URLs instead — repeated `/scrape` calls merge into the same
+  draft (images, videos and source URLs are deduplicated, page counts add up)
+  and the latest title/description wins.
+- **Bot profile writing falls back to OpenRouter.** With both keys set, Groq is
+  tried first and OpenRouter is used automatically if it is missing, errors,
+  or returns unusable JSON.
 - **Slug uniqueness** is checked against Neon; collisions get an automatic
   `-2`, `-3` suffix.
 - Drafts are per Telegram chat and expire after 24 hours. Only file IDs the

@@ -1,7 +1,9 @@
 import type { Env, PersonaDraft, ScrapedProfile } from "./types";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
 const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use null when information is unknown):
 - name: string, display name of the persona
@@ -84,9 +86,146 @@ function tryParseJson(raw: string): PersonaDraft | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Provider chain: Groq first, OpenRouter as the fallback.
+// ---------------------------------------------------------------------------
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface Provider {
+  name: string;
+  url: string;
+  apiKey: string;
+  model: string;
+  extraHeaders?: Record<string, string>;
+}
+
+class ProviderError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "ProviderError";
+    this.status = status;
+  }
+}
+
+/** Configured providers, in attempt order. */
+function getProviders(env: Env): Provider[] {
+  const providers: Provider[] = [];
+  if (env.GROQ_API_KEY) {
+    providers.push({
+      name: "Groq",
+      url: GROQ_URL,
+      apiKey: env.GROQ_API_KEY,
+      model: env.GROQ_MODEL || GROQ_DEFAULT_MODEL,
+    });
+  }
+  if (env.OPENROUTER_API_KEY) {
+    providers.push({
+      name: "OpenRouter",
+      url: OPENROUTER_URL,
+      apiKey: env.OPENROUTER_API_KEY,
+      model: env.OPENROUTER_MODEL || OPENROUTER_DEFAULT_MODEL,
+      extraHeaders: {
+        "HTTP-Referer": "https://dreambabe.pages.dev",
+        "X-Title": "Dream Babe Profile Bot",
+      },
+    });
+  }
+  return providers;
+}
+
+/** POST one chat completion. Attaches the HTTP status to thrown errors. */
+async function requestCompletion(
+  provider: Provider,
+  messages: ChatMessage[],
+  jsonMode: boolean,
+  signal: AbortSignal
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: provider.model,
+    temperature: 0.8,
+    messages,
+  };
+  if (jsonMode) body.response_format = { type: "json_object" };
+
+  let res: Response;
+  try {
+    res = await fetch(provider.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${provider.apiKey}`,
+        "Content-Type": "application/json",
+        ...(provider.extraHeaders || {}),
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    throw new ProviderError(
+      `Could not reach ${provider.name} (${(err as Error).message}).`
+    );
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new ProviderError(
+      `${provider.name} error ${res.status}: ${detail.slice(0, 200)}`,
+      res.status
+    );
+  }
+
+  const data = (await res.json()) as any;
+  return String(data?.choices?.[0]?.message?.content ?? "");
+}
+
+/** A 400 caused by response_format means the model can't do JSON mode. */
+function isJsonModeError(err: unknown): boolean {
+  const candidate = err as { status?: number; message?: string };
+  return (
+    candidate?.status === 400 &&
+    /response_format|json|parameter/i.test(String(candidate?.message ?? ""))
+  );
+}
+
+/** One request with its own timeout, falling back when JSON mode is rejected. */
+async function complete(
+  provider: Provider,
+  messages: ChatMessage[],
+  jsonMode: boolean
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    try {
+      return await requestCompletion(
+        provider,
+        messages,
+        jsonMode,
+        controller.signal
+      );
+    } catch (err) {
+      if (!jsonMode || !isJsonModeError(err)) throw err;
+      // Retry the same provider without response_format.
+      return await requestCompletion(
+        provider,
+        messages,
+        false,
+        controller.signal
+      );
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Generates the full persona field set from the owner's write-up and/or
- * scraped profile data using Groq's OpenAI-compatible JSON mode.
+ * scraped profile data. Tries Groq first and falls back to OpenRouter when
+ * Groq is not configured or fails.
  */
 export async function generatePersonaDraft(
   env: Env,
@@ -99,65 +238,36 @@ export async function generatePersonaDraft(
     );
   }
 
-  const model = env.GROQ_MODEL || DEFAULT_MODEL;
-  const body = {
-    model,
-    temperature: 0.8,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a profile writer for an AI companion entertainment app. " +
-          "You produce structured JSON persona profiles. Output pure JSON only, never prose.",
-      },
-      { role: "system", content: FIELD_INSTRUCTIONS },
-      { role: "user", content: buildUserPrompt(writeUp, scraped) },
-    ],
-  };
+  const providers = getProviders(env);
+  if (providers.length === 0) {
+    throw new Error(
+      "No AI provider configured. Set GROQ_API_KEY or OPENROUTER_API_KEY in the Pages environment variables."
+    );
+  }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You are a profile writer for an AI companion entertainment app. " +
+        "You produce structured JSON persona profiles. Output pure JSON only, never prose.",
+    },
+    { role: "system", content: FIELD_INSTRUCTIONS },
+    { role: "user", content: buildUserPrompt(writeUp, scraped) },
+  ];
 
-  try {
-    let res: Response;
+  let lastError: Error | null = null;
+  for (const provider of providers) {
     try {
-      res = await fetch(GROQ_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      throw new Error(
-        `Could not reach Groq (${(err as Error).message}). Check GROQ_API_KEY and network access.`
-      );
-    }
+      const raw = await complete(provider, messages, true);
+      const parsed = tryParseJson(raw);
+      if (parsed) return parsed;
 
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`Groq error ${res.status}: ${detail.slice(0, 200)}`);
-    }
-
-    const data = (await res.json()) as any;
-    const raw: string = data?.choices?.[0]?.message?.content ?? "";
-    const parsed = tryParseJson(raw);
-    if (parsed) return parsed;
-
-    // One stricter retry if the model returned malformed JSON.
-    const retry = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...body,
-        messages: [
-          ...body.messages,
+      // One stricter retry if the model returned malformed JSON.
+      const retry = await complete(
+        provider,
+        [
+          ...messages,
           { role: "assistant", content: raw.slice(0, 2000) },
           {
             role: "user",
@@ -165,19 +275,23 @@ export async function generatePersonaDraft(
               "That response was not valid JSON matching the schema. Reply with the JSON object only.",
           },
         ],
-      }),
-      signal: controller.signal,
-    });
-    if (!retry.ok) throw new Error(`Groq retry failed with ${retry.status}`);
-    const retryData = (await retry.json()) as any;
-    const retryParsed = tryParseJson(
-      retryData?.choices?.[0]?.message?.content ?? ""
-    );
-    if (!retryParsed) {
-      throw new Error("Groq returned content that could not be parsed as a profile.");
+        true
+      );
+      const retryParsed = tryParseJson(retry);
+      if (retryParsed) return retryParsed;
+
+      throw new Error(
+        `${provider.name} returned content that could not be parsed as a profile.`
+      );
+    } catch (err) {
+      lastError = err as Error;
+      console.warn(`${provider.name} profile generation failed:`, lastError.message);
     }
-    return retryParsed;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error(
+    `All AI providers failed. Last error: ${
+      lastError?.message || "unknown error"
+    }`
+  );
 }

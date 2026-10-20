@@ -11,6 +11,11 @@ TELEGRAM_WEBHOOK_SECRET="change-me-long-random-string"
 GROQ_API_KEY=""
 GROQ_MODEL="llama-3.3-70b-versatile"
 
+# OpenRouter (https://openrouter.ai/keys) — optional. Used automatically when
+# GROQ_API_KEY is missing or Groq fails.
+OPENROUTER_API_KEY=""
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
+
 # Neon PostgreSQL connection string (Neon dashboard -> Connection string)
 DATABASE_URL="postgresql://user:password@ep-xxxx-pooler.aws.neon.tech/neondb?sslmode=require"
 

@@ -14,7 +14,7 @@ Your Telegram app
       ↓ messages, photos, videos
 Cloudflare Pages (runs the bot + your website, free plan)
       ├─ KV namespace  → stores half-finished profiles
-      ├─ Groq API      → writes the profile text
+      ├─ Groq API      → writes the profile text (OpenRouter as fallback)
       └─ Neon database → stores the finished profiles and their videos
 ```
 
@@ -25,6 +25,7 @@ Accounts you will need (all have free tiers):
 | GitHub | Holds the code Cloudflare deploys | github.com |
 | Telegram | Your bot chat | telegram.org / the app |
 | Groq | AI profile writing | console.groq.com |
+| OpenRouter (optional) | Automatic fallback profile writer | openrouter.ai |
 | Cloudflare | Runs the bot and website | dash.cloudflare.com |
 | Neon | PostgreSQL database | neon.tech |
 
@@ -91,6 +92,12 @@ Do not continue until the bot files (`functions/`, `src/lib/bot/`,
 2. Click **Create API Key**, name it `dream-babe-bot`.
 3. Copy the key (starts with `gsk_`) as **GROQ_API_KEY** — it is shown once.
 
+**Optional fallback:** create an **OpenRouter** account at
+**https://openrouter.ai/keys**, make a key (starts with `sk-or-`) and save it
+as **OPENROUTER_API_KEY**. If Groq is missing, rate-limited or fails, the bot
+writes the profile through OpenRouter automatically — no other change needed.
+You can use OpenRouter *instead* of Groq by leaving `GROQ_API_KEY` empty.
+
 ---
 
 ## Part 6 — Create (or open) the Cloudflare Pages project (10 minutes)
@@ -146,10 +153,12 @@ KV stores each chat's in-progress profile and the media allowlist.
    |---|---|---|
    | `TELEGRAM_BOT_TOKEN` | Secret | token from Part 4 |
    | `TELEGRAM_WEBHOOK_SECRET` | Secret | invent a long random string, e.g. `whsec_9fK2xP7mQ4vL8nR1` |
-   | `GROQ_API_KEY` | Secret | `gsk_...` key from Part 5 |
+   | `GROQ_API_KEY` | Secret | `gsk_...` key from Part 5 (or leave empty with OpenRouter) |
    | `DATABASE_URL` | Secret | Neon connection string from Part 3 |
    | `PUBLIC_BASE_URL` | Plaintext | your Pages URL, no trailing slash |
    | `GROQ_MODEL` | Plaintext | `llama-3.3-70b-versatile` |
+   | `OPENROUTER_API_KEY` | Secret, optional | `sk-or-...` key from Part 5 |
+   | `OPENROUTER_MODEL` | Plaintext, optional | `meta-llama/llama-3.3-70b-instruct` |
 
 3. Save. Then open **Deployments**, click the **⋯ menu** on the latest
    deployment → **Retry deployment** so the variables take effect.
@@ -209,10 +218,25 @@ In your Telegram bot chat:
 5. Send your **write-up** as ordinary messages, e.g.
    *"24-year-old barista in Toronto, warm and witty, loves jazz and hiking,
    flirty texting style."* Multiple messages combine automatically.
-6. Optional: `/scrape https://example.com/some-profile`
-7. `/status` — review what's collected.
-8. `/preview` — Groq writes the full profile; use `/setname` or `/setslug`
-   to adjust, then `/preview` again.
+6. Optional: `/scrape https://example.com/some-profile` — or
+   `/scrape https://example.com/some-profile 30 5` to ask for up to 30 videos
+   while following up to 5 paginated pages. Only **JPEG/PNG** images are
+   imported (SVG logos, webp/gif thumbnails, icons and sprites are dropped),
+   and videos are also read out of the page's inline script data, so one call
+   usually finds every clip on the listing.
+   - Video count: default 20, maximum 50.
+   - Pages: default 5, hard maximum 10 — each extra page costs another
+     subrequest and CPU time inside one Function invocation, and Workers has
+     limits on both.
+   - Infinite-scroll or JavaScript-only pagination can't be followed. Scrape
+     the individual page links with separate `/scrape` calls instead; they
+     **merge into the same draft** (duplicate images/videos are removed, page
+     counts add up, the newest title/description wins).
+7. `/status` — review what's collected (it shows pages, images and videos
+   from scrapes).
+8. `/preview` — the AI writes the full profile (Groq, or OpenRouter if Groq
+   is unavailable); use `/setname` or `/setslug` to adjust, then `/preview`
+   again.
 9. `/confirm` — the bot writes the persona and all videos into Neon and
    replies with the live link `https://YOUR-DOMAIN/dreamgirl/<slug>`.
 10. Open that link, and start a call to confirm the videos play.
@@ -225,7 +249,7 @@ In your Telegram bot chat:
 |---|---|
 | Bot never replies | Open the `getWebhookInfo` URL (Part 9). Its `last_error_message` names the problem — usually a wrong domain or webhook secret. |
 | `Unauthorized` in webhook errors | The `secret_token` in Part 9 doesn't equal the `TELEGRAM_WEBHOOK_SECRET` variable. Make them identical and re-run Part 9. |
-| Groq error on `/preview` | `GROQ_API_KEY` missing, mistyped or invalid. Fix the variable and redeploy (Part 8, step 3). |
+| Groq error on `/preview` | `GROQ_API_KEY` missing, mistyped or invalid. Fix the variable and redeploy (Part 8, step 3). If `OPENROUTER_API_KEY` is set the bot silently falls back to OpenRouter; "No AI provider configured" means **both** keys are missing. |
 | `/confirm` says "Database rejected…" | Usually the Neon tables don't exist yet — re-run `prisma/neon-schema.sql` in the Neon SQL editor — or `DATABASE_URL` is wrong. |
 | `/api/personas` returns HTML or 500 | Pages can't reach Neon. Verify `DATABASE_URL`, confirm the SQL schema ran, then redeploy. |
 | New profile missing from the website | Hard-refresh the explore page; the read endpoint caches for 60 seconds. If still missing, check Functions logs (below). |
@@ -233,6 +257,9 @@ In your Telegram bot chat:
 | Video over 20 MB rejected | Telegram bots can't download bigger files — send it as a direct URL instead. |
 | Embed/HLS video doesn't play on Pages | The Express-only `/api/hls-proxy` route doesn't exist on Pages. Use direct `.mp4`/`.webm` URLs or bot-uploaded files. |
 | `/scrape` says blocked or no data | The page uses a browser/Cloudflare challenge or renders only in JavaScript, which a Worker can't load. Send the media and write-up manually. |
+| `/scrape` returns few images | Only JPEG/PNG photos are imported; SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. |
+| `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |
+| `/scrape` misses an infinite-scroll gallery | A Worker can't scroll or run the page's JavaScript. Copy the individual page links and `/scrape` them one by one. |
 | Variable changes seem ignored | Variables load only on a fresh deploy: **Deployments → ⋯ → Retry deployment**. |
 
 ### Live logs
