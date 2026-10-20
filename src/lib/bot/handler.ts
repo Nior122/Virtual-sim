@@ -2,6 +2,7 @@ import type {
   Draft,
   Env,
   PersonaDraft,
+  ScrapedProfile,
   StoredMedia,
   TelegramMessage,
   TelegramUpdate,
@@ -17,7 +18,13 @@ import {
   saveDraft,
 } from "./store";
 import { generatePersonaDraft } from "./groq";
-import { scrapeProfile } from "./scrape";
+import {
+  DEFAULT_MAX_PAGES,
+  DEFAULT_VIDEO_LIMIT,
+  HARD_MAX_PAGES,
+  MAX_VIDEO_LIMIT,
+  scrapeProfile,
+} from "./scrape";
 import {
   addVideo,
   buildPersonaPayload,
@@ -30,7 +37,7 @@ const IMAGE_URL_RE = /\.(jpe?g|png|webp|gif)(\?|#|$)/i;
 const VIDEO_URL_RE = /\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i;
 const EMBED_URL_RE = /(embed|rubyvidhub|\.html|m3u8)/i;
 const URL_RE = /https?:\/\/[^\s]+/gi;
-const MAX_VIDEOS = 20;
+const MAX_VIDEOS = MAX_VIDEO_LIMIT;
 
 const HELP_TEXT = `Dream Babe profile bot
 
@@ -39,8 +46,8 @@ Then send, in any order:
  • Photos (1st = profile picture, 2nd = cover, next up to ${MAX_GALLERY} go to the gallery, ${MAX_IMAGES} total)
  • Videos as files (under ${TELEGRAM_DOWNLOAD_LIMIT_MB}MB) or paste direct video/embed URLs
  • Any write-up text — bios, traits, background. Multiple messages are combined
-/scrape <url> — pull images, videos and text from a public profile page
-/preview — Groq writes the full profile from your material
+/scrape <url> [video count] [max pages] — pull JPEG/PNG images and videos across paginated profile pages (e.g. /scrape https://x.com/p 30 5)
+/preview — the AI writes the full profile from your material (OpenRouter fallback)
 /setname <name> and /setslug <slug> — override the generated values
 /status — show what the draft currently contains
 /confirm — create the profile and attach all videos
@@ -113,6 +120,54 @@ function tgVideoCount(draft: Draft): number {
   return draft.media.filter((m) => m.kind === "video").length;
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+/**
+ * Repeated /scrape runs accumulate into one draft: union images, videos and
+ * source URLs (deduped by exact URL), sum pages, and let the newest title,
+ * description and text excerpt win.
+ */
+function mergeScraped(
+  existing: ScrapedProfile | null | undefined,
+  incoming: ScrapedProfile
+): ScrapedProfile {
+  if (!existing) return incoming;
+
+  const images: string[] = [];
+  for (const url of [...(existing.images || []), ...incoming.images]) {
+    if (images.length >= MAX_IMAGES) break;
+    if (!images.includes(url)) images.push(url);
+  }
+
+  const videos: string[] = [];
+  for (const url of [...(existing.videos || []), ...incoming.videos]) {
+    if (videos.length >= MAX_VIDEOS) break;
+    if (!videos.includes(url)) videos.push(url);
+  }
+
+  const sourceUrls: string[] = [];
+  for (const url of [
+    ...(existing.sourceUrls || []),
+    ...(incoming.sourceUrls || []),
+  ]) {
+    if (!sourceUrls.includes(url)) sourceUrls.push(url);
+  }
+
+  return {
+    sourceUrl: incoming.sourceUrl,
+    title: incoming.title || existing.title,
+    description: incoming.description || existing.description,
+    textSnippet: incoming.textSnippet || existing.textSnippet,
+    images,
+    videos,
+    sourceUrls,
+    pagesScanned: (existing.pagesScanned ?? 0) + (incoming.pagesScanned ?? 0),
+    blocked: incoming.blocked ?? existing.blocked,
+  };
+}
+
 function statusLine(draft: Draft): string {
   const photos = photoCount(draft);
   const videos = tgVideoCount(draft) + draft.videoLinks.length +
@@ -122,6 +177,11 @@ function statusLine(draft: Draft): string {
     `• Photos: ${photos} Telegram + ${draft.imageLinks.length} links + ${draft.scraped?.images.length || 0} scraped`,
     `• Videos: ${videos}`,
     `• Write-up: ${draft.writeUp ? draft.writeUp.length + " chars" : "empty"}`,
+    draft.scraped
+      ? `• Scraped: ${draft.scraped.pagesScanned ?? 0} page(s), ${
+          draft.scraped.images.length
+        } images, ${draft.scraped.videos.length} videos`
+      : null,
     draft.scraped ? `• Scraped source: ${draft.scraped.sourceUrl}` : null,
     draft.generated ? `• Preview: ready (${draft.generated.name} / ${draft.generated.slug})` : "• Preview: not generated yet",
   ].filter(Boolean);
@@ -180,21 +240,67 @@ async function handleCommand(
 
     case "/scrape": {
       if (!arg) {
-        await sendMessage(env, chatId, "Usage: /scrape https://example.com/profile");
+        await sendMessage(
+          env,
+          chatId,
+          `Usage: /scrape https://example.com/profile [number of videos] [max pages]\n` +
+            `e.g. /scrape https://example.com/p 10 5 (videos max ${MAX_VIDEO_LIMIT}, ` +
+            `pages default ${DEFAULT_MAX_PAGES}, hard max ${HARD_MAX_PAGES})`
+        );
         return;
       }
+
+      // "<url> [video count] [max pages]" — bare integers after the URL.
+      const tokens = arg.split(/\s+/).filter(Boolean);
+      const targetUrl = tokens[0];
+      const numbers: number[] = [];
+      for (const token of tokens.slice(1)) {
+        if (/^\d+$/.test(token)) numbers.push(parseInt(token, 10));
+      }
+      const requested = clampNumber(
+        numbers.length > 0 ? numbers[0] : DEFAULT_VIDEO_LIMIT,
+        1,
+        MAX_VIDEO_LIMIT
+      );
+      const maxPages = clampNumber(
+        numbers.length > 1 ? numbers[1] : DEFAULT_MAX_PAGES,
+        1,
+        HARD_MAX_PAGES
+      );
+
       const draft = await ensureDraft(env, chatId);
-      await sendMessage(env, chatId, "Scraping that page, one moment…");
+      await sendMessage(
+        env,
+        chatId,
+        `Scraping that page for up to ${requested} video(s) across up to ` +
+          `${maxPages} page(s), one moment…`
+      );
       try {
-        const scraped = await scrapeProfile(arg);
-        draft.scraped = scraped;
+        const scraped = await scrapeProfile(targetUrl, {
+          videoLimit: requested,
+          maxPages,
+        });
+        draft.scraped = mergeScraped(draft.scraped, scraped);
         draft.generated = null;
         await saveDraft(env, draft);
+
+        const found = scraped.videos.length;
+        const pages = scraped.pagesScanned;
+        const videoLine =
+          found === 0
+            ? `0 videos found across ${pages} page(s)`
+            : found < requested
+              ? `you asked for ${requested} but only ${found} exist across ` +
+                `${pages} page(s) — all available ones were added`
+              : `${found} videos added (requested ${requested}) across ` +
+                `${pages} page(s)`;
+
         await sendMessage(
           env,
           chatId,
           `Scraped: ${scraped.title || "untitled"}\n` +
-            `• ${scraped.images.length} images, ${scraped.videos.length} videos\n` +
+            `• ${scraped.images.length} JPEG/PNG image(s)\n` +
+            `• Videos: ${videoLine}\n` +
             (scraped.description ? `• ${scraped.description.slice(0, 200)}\n` : "") +
             `Send more material or run /preview.`
         );
@@ -269,7 +375,7 @@ async function runPreview(env: Env, chatId: number): Promise<void> {
     return;
   }
 
-  await sendMessage(env, chatId, "Groq is writing the profile…");
+  await sendMessage(env, chatId, "Writing the profile…");
   try {
     const generated = await generatePersonaDraft(
       env,

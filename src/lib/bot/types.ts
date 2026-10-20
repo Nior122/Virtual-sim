@@ -8,10 +8,15 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   /** Shared secret sent by Telegram as X-Telegram-Bot-Api-Secret-Token */
   TELEGRAM_WEBHOOK_SECRET: string;
-  /** Groq OpenAI-compatible API key */
-  GROQ_API_KEY: string;
-  /** Optional model override (defaults to llama-3.3-70b-versatile) */
+  /** Groq OpenAI-compatible API key (optional when OpenRouter is set) */
+  GROQ_API_KEY?: string;
+  /** Optional Groq model override (defaults to llama-3.3-70b-versatile) */
   GROQ_MODEL?: string;
+  /** OpenRouter API key — fallback writer when Groq is missing or fails */
+  OPENROUTER_API_KEY?: string;
+  /** Optional OpenRouter model override
+   *  (defaults to meta-llama/llama-3.3-70b-instruct) */
+  OPENROUTER_MODEL?: string;
   /** Neon PostgreSQL connection string (serverless driver, HTTPS) */
   DATABASE_URL: string;
   /** Public base URL of THIS Pages project (media + profile links).
@@ -96,6 +101,10 @@ export interface ScrapedProfile {
   videos: string[];
   textSnippet?: string;
   blocked?: boolean;
+  /** How many paginated pages were fetched for this scrape */
+  pagesScanned: number;
+  /** Every page URL actually scanned, in order */
+  sourceUrls: string[];
 }
 
 export interface PersonaDraft {
