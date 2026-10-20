@@ -197,6 +197,43 @@ export async function createVideoRecord(
   return rows[0] as { id: string };
 }
 
+// --- Profile listing for the bot's /profiles command ----------------------
+
+export interface PersonaSummaryRow {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+  profileImage: string | null;
+  coverImage: string | null;
+  gallery: string | null;
+}
+
+/** Every persona (active or not) with the columns needed for media counts. */
+export async function listPersonaSummaries(
+  env: Env
+): Promise<PersonaSummaryRow[]> {
+  const sql = sqlFor(env);
+  return (await sql.query(
+    `SELECT "id", "name", "slug", "active", "profileImage", "coverImage", "gallery"
+       FROM "Persona"
+      ORDER BY "createdAt" DESC`
+  )) as PersonaSummaryRow[];
+}
+
+/** Active video count per persona (COUNT(*) comes back as a string). */
+export async function countVideosByPersona(
+  env: Env
+): Promise<Array<{ personaId: string; count: number | string }>> {
+  const sql = sqlFor(env);
+  return (await sql.query(
+    `SELECT "personaId", COUNT(*) AS "count"
+       FROM "PersonaVideo"
+      WHERE "active" = true
+      GROUP BY "personaId"`
+  )) as Array<{ personaId: string; count: number | string }>;
+}
+
 // --- Edits to an existing profile (media only) -----------------------------
 
 export interface PersonaMediaForEdit {

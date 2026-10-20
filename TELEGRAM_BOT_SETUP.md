@@ -219,10 +219,13 @@ In your Telegram bot chat:
    *"24-year-old barista in Toronto, warm and witty, loves jazz and hiking,
    flirty texting style."* Multiple messages combine automatically.
 6. Optional: `/scrape https://example.com/some-profile` — or
-   `/scrape https://example.com/some-profile 30 5` to ask for up to 30 videos
-   while following up to 5 paginated pages. Only **JPEG** images are
-   imported (PNG, SVG logos, webp/gif thumbnails, icons and sprites are
-   dropped),
+   `/scrape https://example.com/some-profile 30 5 4` to ask for up to 30
+   videos across 5 paginated pages while opening up to 4 individual post
+   pages. Post pages matter because many sites only show the real image
+   after you click a thumbnail, so the scraper opens them and takes the
+   image from there. Only **JPEG** images are imported (PNG, SVG logos,
+   webp/gif thumbnails, icons and sprites are dropped), and URLs without a
+   `.jpg` suffix are still accepted when the server returns `image/jpeg`.
    and videos are also read out of the page's inline script data, so one call
    usually finds every clip on the listing.
    - Video count: **all it can find by default (maximum 50)**; pass a smaller
@@ -236,7 +239,8 @@ In your Telegram bot chat:
      removed, page counts add up, the newest title/description wins). You can
      also use `/image <url>` or `/video <url>` to force a direct link in.
 7. `/status` — review what's collected (it shows pages, images and videos
-   from scrapes).
+   from scrapes). `/profiles` lists every profile with its slug, image count
+   and video count.
 8. `/links` — optional: list every image and video URL the draft will use.
 9. `/preview` — the AI writes the full profile (Groq, or OpenRouter if Groq
    is unavailable); use `/setname` or `/setslug` to adjust, then `/preview`
@@ -246,6 +250,22 @@ In your Telegram bot chat:
     exact image/video URLs it stored. Embed players are resolved to their real
     stream first; anything with no playable stream is skipped and reported.
 11. Open that link, and start a call to confirm the videos play.
+
+### Creating several profiles at once (bulk)
+
+1. Send `/bulk` (the bot waits for your list) — or `/bulk <list>` directly.
+2. Paste one entry per line, or separate entries with commas:
+   ```
+   https://site.com/ava
+   https://site.com/mia & https://site.com/mia/videos
+   ```
+   One URL per entry means images **and** videos come from it. `A & B` means
+   images from A and videos from B (`images: … videos: …` also works).
+3. The bot creates a profile per entry and replies with the results. If the
+   batch is long it stops after a few entries — send `/bulknext` to continue,
+   or `/bulkcancel` to stop.
+4. Up to 25 entries per batch. Profiles are created immediately; `/profiles`
+   lists them and `/edit <slug>` fixes any of them.
 
 ### Changing a profile later (add / replace / delete media)
 
@@ -276,8 +296,11 @@ In your Telegram bot chat:
 | Video over 20 MB rejected | Telegram bots can't download bigger files — send it as a direct URL instead. |
 | Embed/HLS video doesn't play on Pages | The Express-only `/api/hls-proxy` route doesn't exist on Pages. Use direct `.mp4`/`.webm` URLs or bot-uploaded files. |
 | `/scrape` says blocked or no data | The page uses a browser/Cloudflare challenge or renders only in JavaScript, which a Worker can't load. Send the media and write-up manually. |
-| `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. |
+| `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. The reply says how many image URLs were seen and rejected. Raise the post-page count (`/scrape <url> 50 5 6`) if the images sit inside posts. |
+| `/scrape` finds no images at all | The page may serve only WebP/PNG (convert or use `/image <jpeg url>`), or the main image is behind JavaScript. Try increasing post pages. |
 | A copied image link is refused | The bot only accepts `.jpg/.jpeg`. Convert the file to JPEG and send it again. |
+| `/bulk` skips an entry | That page had no JPEG images (the reply says how many image URLs were seen but not served as JPEG). Add `& <video page>` or use `/edit` after creating. |
+| Bulk stopped halfway | Only a few entries fit in one webhook call — send `/bulknext` to process the rest of the queue. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
 | `/save` removed videos I wanted | `/save` deletes video rows you removed with `/removevideo`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |

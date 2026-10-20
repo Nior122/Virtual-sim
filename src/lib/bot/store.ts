@@ -1,8 +1,9 @@
-import type { Draft, Env, MediaKind, StoredMedia } from "./types";
+import type { BulkEntry, Draft, Env, MediaKind, StoredMedia } from "./types";
 import { DRAFT_TTL_SECONDS } from "./types";
 
 const draftKey = (chatId: number) => `draft:${chatId}`;
 const mediaKey = (fileId: string) => `media:${fileId}`;
+const bulkKey = (chatId: number) => `bulk:${chatId}`;
 
 export async function getDraft(env: Env, chatId: number): Promise<Draft | null> {
   return env.BOT_KV.get<Draft>(draftKey(chatId), "json");
@@ -67,4 +68,39 @@ export function appendMedia(draft: Draft, item: StoredMedia): void {
   draft.media.sort((a, b) => a.messageId - b.messageId);
   // Regenerating after new material invalidates the old preview.
   draft.generated = null;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk generation queue (entries still waiting to be processed)
+// ---------------------------------------------------------------------------
+export interface BulkQueue {
+  entries: BulkEntry[];
+  createdAt: number;
+  /** Results already reported, so /bulknext can summarise the whole batch */
+  done: number;
+  failed: number;
+}
+
+export async function getBulkQueue(
+  env: Env,
+  chatId: number
+): Promise<BulkQueue | null> {
+  return env.BOT_KV.get<BulkQueue>(bulkKey(chatId), "json");
+}
+
+export async function saveBulkQueue(
+  env: Env,
+  chatId: number,
+  queue: BulkQueue
+): Promise<void> {
+  await env.BOT_KV.put(bulkKey(chatId), JSON.stringify(queue), {
+    expirationTtl: DRAFT_TTL_SECONDS,
+  });
+}
+
+export async function clearBulkQueue(
+  env: Env,
+  chatId: number
+): Promise<void> {
+  await env.BOT_KV.delete(bulkKey(chatId));
 }

@@ -13,6 +13,13 @@ const BROWSER_UA =
 const PHOTO_RE = /\.jpe?g(\?|#|$)/i;
 const PHOTO_QUERY_RE = /[?&](?:fm|format|f)=jpe?g(&|#|$)/i;
 const SVG_RE = /\.svg(\?|#|$)/i;
+// Explicitly non-JPEG image files. CDN transform URLs that ask for JPEG
+// (?fm=jpg) still count as JPEG.
+const NON_JPEG_IMAGE_RE =
+  /\.(png|webp|gif|bmp|avif|heic|heif|tiff?)(\?|#|$)/i;
+// Things that are definitely not an image regardless of extension.
+const NOT_IMAGE_RE =
+  /\.(mp4|webm|mov|m4v|m3u8|html?|xhtml|pdf|zip|rar|js|mjs|css|json|xml|txt)($|[?#])/i;
 const VIDEO_RE = /\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i;
 const EMBED_RE = /(embed|rubyvidhub|\.html|m3u8)/i;
 const JUNK_IMG_RE =
@@ -34,14 +41,94 @@ export interface ScrapeOptions {
   videoLimit?: number;
   imageLimit?: number;
   maxPages?: number;
+  /** Set false to skip image work (video-only scrapes in bulk mode) */
+  images?: boolean;
+  /** Set false to skip video work (image-only scrapes in bulk mode) */
+  videos?: boolean;
+  /** Cap on image content-type probes (Workers subrequest budget) */
+  maxImageChecks?: number;
+  /**
+   * How many post/detail pages to open because many sites only expose the
+   * real image after clicking a thumbnail. 0 disables detail crawling.
+   */
+  detailPages?: number;
 }
 
-/** True for JPEG URLs (including format= query params) and nothing else. */
+/** Detail pages opened per scrape when the caller does not ask for a count. */
+export const DEFAULT_DETAIL_PAGES = 4;
+export const HARD_MAX_DETAIL_PAGES = 6;
+
+/** Content-type probes allowed per scrape (Workers subrequest budget). */
+const MAX_IMAGE_CHECKS = 12;
+
+/** True for URLs that are JPEG by their name/query, no network call needed. */
 export function isPhotoUrl(url: string): boolean {
   if (!url) return false;
   if (SVG_RE.test(url)) return false;
+  if (NON_JPEG_IMAGE_RE.test(url) && !PHOTO_QUERY_RE.test(url)) return false;
   return PHOTO_RE.test(url) || PHOTO_QUERY_RE.test(url);
 }
+
+/**
+ * Could this URL still be a JPEG even without a .jpg suffix?
+ * CDNs often serve photos from extensionless paths (`/media/8f3a…/1280`), so
+ * these are verified with a content-type probe instead of being dropped.
+ */
+export function isImageCandidate(url: string): boolean {
+  if (!url) return false;
+  const value = url.trim();
+  if (!value || value.startsWith("data:")) return false;
+  if (SVG_RE.test(value)) return false;
+  if (JUNK_IMG_RE.test(value)) return false;
+  if (isPhotoUrl(value)) return true;
+  if (NON_JPEG_IMAGE_RE.test(value) && !PHOTO_QUERY_RE.test(value)) return false;
+  if (NOT_IMAGE_RE.test(value)) return false;
+  return true;
+}
+
+/** Best (largest) candidate in a `srcset` / `data-srcset` attribute. */
+export function largestFromSrcset(value: string | null): string | null {
+  if (!value) return null;
+  let best: { url: string; weight: number } | null = null;
+  for (const part of value.split(",")) {
+    const pieces = part.trim().split(/\s+/).filter(Boolean);
+    if (pieces.length === 0) continue;
+    const url = pieces[0];
+    let weight = 0;
+    for (const descriptor of pieces.slice(1)) {
+      const width = descriptor.match(/^(\d+)(w|h)?$/i);
+      if (width) weight = Math.max(weight, parseInt(width[1], 10));
+      const density = descriptor.match(/^(\d+(?:\.\d+)?)x$/i);
+      if (density) weight = Math.max(weight, Math.round(parseFloat(density[1]) * 1000));
+    }
+    if (!best || weight > best.weight) best = { url, weight };
+  }
+  return best ? best.url : null;
+}
+
+/** Read one HTML attribute, tolerating single/double/unquoted values. */
+function readAttr(tag: string, name: string): string | null {
+  const re = new RegExp(
+    `\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    "i"
+  );
+  const match = tag.match(re);
+  if (!match) return null;
+  const raw = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+  return raw ? decodeHtml(raw) : null;
+}
+
+const IMAGE_ATTRS = [
+  "src",
+  "data-src",
+  "data-original",
+  "data-lazy-src",
+  "data-image",
+  "data-full",
+  "data-large",
+  "data-zoom-image",
+  "data-original-src",
+];
 
 function clampInt(
   value: number | undefined,
@@ -148,6 +235,243 @@ export function extractVideosFromScripts(
     }
   }
   return found;
+}
+
+// ---------------------------------------------------------------------------
+// Image collection (thumbnails, srcset, lazyload attributes) + verification
+// ---------------------------------------------------------------------------
+export interface ImageGroups {
+  /** The page's declared main image(s): OpenGraph, Twitter, JSON-LD. */
+  primary: string[];
+  /** Thumbnails and gallery images from the markup. */
+  secondary: string[];
+}
+
+/** Flat, ordered list of every image candidate on a page. */
+export function collectImageCandidates(html: string, pageUrl: string): string[] {
+  const groups = collectImageGroups(html, pageUrl);
+  return [
+    ...groups.primary,
+    ...groups.secondary.filter((url) => !groups.primary.includes(url)),
+  ];
+}
+
+/**
+ * Split a page's image candidates into the declared main image(s) and the
+ * thumbnails/lazy backgrounds. The scraper ranks post-page images above
+ * listing thumbnails, which is what makes "the real photo is inside the post"
+ * sites work.
+ */
+export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
+  const primary: string[] = [];
+  const secondary: string[] = [];
+  const makePush = (target: string[]) => (raw: string | null) => {
+    if (!raw || target.length >= 40) return;
+    const abs = absoluteUrl(raw, pageUrl);
+    if (!abs) return;
+    if (!isImageCandidate(abs)) return;
+    if (!target.includes(abs)) target.push(abs);
+  };
+  const pushPrimary = makePush(primary);
+  const push = makePush(secondary);
+
+  pushPrimary(readMetaPair(html, "og:image"));
+  pushPrimary(readMetaPair(html, "og:image:secure_url"));
+  pushPrimary(readMetaPair(html, "og:image:url"));
+  pushPrimary(readMetaPair(html, "twitter:image"));
+  pushPrimary(readMetaPair(html, "twitter:image:src"));
+
+  for (const block of collectJsonLd(html)) {
+    for (const value of [block.image, block.thumbnail, block.contentUrl]) {
+      const values = Array.isArray(value) ? value : [value];
+      for (const entry of values) {
+        const raw =
+          typeof entry === "string" ? entry : (entry as any)?.url ?? null;
+        pushPrimary(raw);
+      }
+    }
+  }
+
+  const tagRe = /<(?:img|source)\b[^>]*>/gi;
+  let tag: RegExpExecArray | null;
+  while ((tag = tagRe.exec(html)) !== null && secondary.length < 40) {
+    // Prefer the largest responsive candidate, then the plain attributes.
+    push(largestFromSrcset(readAttr(tag[0], "srcset")));
+    push(largestFromSrcset(readAttr(tag[0], "data-srcset")));
+    for (const attribute of IMAGE_ATTRS) push(readAttr(tag[0], attribute));
+  }
+
+  // <video poster="…"> thumbnails.
+  const posterRe = /<video\b[^>]*>/gi;
+  while ((tag = posterRe.exec(html)) !== null && secondary.length < 40) {
+    push(readAttr(tag[0], "poster"));
+  }
+
+  // Full-size image links wrapped around thumbnails.
+  const anchorRe = /<a\b[^>]*>/gi;
+  while ((tag = anchorRe.exec(html)) !== null && secondary.length < 40) {
+    const href = readAttr(tag[0], "href");
+    if (href) {
+      const abs = absoluteUrl(href, pageUrl) || "";
+      if (/^https?:\/\//i.test(abs) && isPhotoUrl(abs)) push(href);
+    }
+  }
+
+  // Lazy-background thumbnails and inline CSS background images.
+  const backgroundAttrRe =
+    /\b(?:data-bg|data-background|data-bg-src|data-bgset|data-thumb|data-image-src|data-poster|data-thumbnail)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  while ((tag = backgroundAttrRe.exec(html)) !== null && secondary.length < 40) {
+    push(largestFromSrcset(tag[1] ?? tag[2] ?? null) ?? (tag[1] ?? tag[2] ?? null));
+  }
+  const cssUrlRe = /background(?:-image)?\s*:\s*[^;"'}]*url\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+  while ((tag = cssUrlRe.exec(html)) !== null && secondary.length < 40) {
+    push(tag[1]);
+  }
+
+  // <meta itemprop="image" content="…">
+  const itempropRe =
+    /<meta[^>]+itemprop=["']image["'][^>]*>/gi;
+  while ((tag = itempropRe.exec(html)) !== null && primary.length < 40) {
+    push(readAttr(tag[0], "content"));
+  }
+
+  return { primary, secondary };
+}
+
+/** Probe a URL and report whether the server actually returns a JPEG. */
+export async function isJpegResponse(
+  url: string,
+  referer: string
+): Promise<boolean> {
+  const headers: Record<string, string> = {
+    "User-Agent": BROWSER_UA,
+    Accept: "image/jpeg,image/*;q=0.8,*/*;q=0.5",
+    Referer: referer,
+  };
+  const isJpeg = (res: Response) => {
+    const type = (res.headers.get("content-type") || "").toLowerCase();
+    return type.startsWith("image/jpeg") || type.startsWith("image/jpg");
+  };
+
+  const attempt = async (
+    method: "HEAD" | "GET",
+    extra: Record<string, string> = {}
+  ): Promise<boolean | null> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { ...headers, ...extra },
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      if (!res.ok && res.status !== 206) {
+        res.body?.cancel().catch(() => {});
+        return null;
+      }
+      const result = isJpeg(res);
+      // Do not download the image body: only the headers matter here.
+      res.body?.cancel().catch(() => {});
+      return result;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  const head = await attempt("HEAD");
+  if (head !== null && head) return true;
+  // Many CDNs reject HEAD or omit the type there: retry with a 1-byte GET.
+  const ranged = await attempt("GET", { Range: "bytes=0-0" });
+  return ranged === true;
+}
+
+/**
+ * Turn ordered candidates into a JPEG image list. Explicit .jpg URLs are
+ * accepted immediately; everything else (extensionless CDN paths, unknown
+ * extensions) needs a JPEG content-type probe, bounded for the Workers
+ * subrequest budget.
+ */
+export async function resolveImageCandidates(
+  candidates: string[],
+  limit: number,
+  referer: string,
+  maxChecks = MAX_IMAGE_CHECKS
+): Promise<{ images: string[]; checked: number; rejected: number }> {
+  const images: string[] = [];
+  let checked = 0;
+  let rejected = 0;
+  const checkBudget = Math.max(0, Math.min(maxChecks, MAX_IMAGE_CHECKS));
+  for (const url of candidates) {
+    if (images.length >= limit) break;
+    if (isPhotoUrl(url)) {
+      images.push(url);
+      continue;
+    }
+    if (checked >= checkBudget) break;
+    checked += 1;
+    if (await isJpegResponse(url, referer)) images.push(url);
+    else rejected += 1;
+  }
+  return { images, checked, rejected };
+}
+
+// ---------------------------------------------------------------------------
+// Detail ("post") pages — where sites hide the main image behind a thumbnail
+// ---------------------------------------------------------------------------
+const DETAIL_PATH_RE =
+  /\/(?:post|posts|photo|photos|pic|pics|media|video|videos|clip|clips|gallery|galleries|watch|view|item|items|content|detail|details|album|albums|p|e)\/|\/\d{3,}(?:\/|$)/i;
+const NON_DETAIL_PATH_RE =
+  /(?:login|logout|signin|signup|sign-up|register|account|cart|checkout|contact|about|terms|privacy|faq|dmca|help|support|search|tag\/|tags\/|category\/|categories\/|page\/|sort=|filter=|\/feed|\/rss)/i;
+
+/**
+ * Links that look like individual posts/galleries on the same site, in page
+ * order. Off-site links, pagination, navigation and media files are skipped.
+ */
+export function collectDetailLinks(
+  html: string,
+  pageUrl: string,
+  visited: Set<string>
+): string[] {
+  const current = new URL(pageUrl);
+  const links: string[] = [];
+  const anchorRe = /<a\b[^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = anchorRe.exec(html)) !== null) {
+    const href = readAttr(match[0], "href");
+    if (!href) continue;
+    const abs = absoluteUrl(href, pageUrl);
+    if (!abs) continue;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(abs);
+    } catch {
+      continue;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+    if (parsed.hostname !== current.hostname) continue;
+    parsed.hash = "";
+    const normalized = parsed.toString();
+    if (normalized === stripHash(pageUrl) || visited.has(normalized)) continue;
+    if (links.includes(normalized)) continue;
+
+    const path = parsed.pathname;
+    if (NOT_IMAGE_RE.test(path) || isPhotoUrl(path)) continue;
+    if (NON_DETAIL_PATH_RE.test(`${path}?${parsed.search}`)) continue;
+    if (pageNumber(normalized) !== null) continue;
+
+    // A post link either sits on a post-like path, or wraps a thumbnail.
+    const wrapsImage = /<img\b/i.test(match[1]);
+    if (!DETAIL_PATH_RE.test(path) && !wrapsImage) continue;
+    links.push(normalized);
+    if (links.length >= 24) break;
+  }
+
+  return links;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +688,16 @@ export async function scrapeProfile(
     1,
     HARD_MAX_PAGES
   );
+  const detailPages = clampInt(
+    options.detailPages,
+    DEFAULT_DETAIL_PAGES,
+    0,
+    HARD_MAX_DETAIL_PAGES
+  );
+  // Bulk mode scrapes images from one URL and videos from another, so each
+  // half can be switched off to save subrequests.
+  const wantImages = options.images !== false;
+  const wantVideos = options.videos !== false;
 
   let parsedUrl: URL;
   try {
@@ -376,11 +710,18 @@ export async function scrapeProfile(
   }
 
   const startUrl = stripHash(parsedUrl.toString());
-  const images: string[] = [];
+  // Ranked image candidates: the page's own og/twitter/JSON-LD image first,
+  // then images pulled from individual post pages (where the real photo often
+  // lives), then listing thumbnails/lazy backgrounds.
+  const primaryCandidates: string[] = [];
+  const detailCandidates: string[] = [];
+  const listingCandidates: string[] = [];
   const videos: string[] = [];
   const sourceUrls: string[] = [];
   const visited = new Set<string>();
   let pagesScanned = 0;
+  let detailPagesScanned = 0;
+  let detailLinksTried = new Set<string>();
   let title: string | null = null;
   let description: string | null = null;
   let textSnippet = "";
@@ -418,46 +759,39 @@ export async function scrapeProfile(
         (typeof ld?.description === "string" ? ld.description : null);
     }
 
-    // 1) OpenGraph media (usually the highest-quality signals).
-    if (isFirstPage) {
-      const ogImage =
-        readMetaPair(html, "og:image") ||
-        readMetaPair(html, "og:image:secure_url");
-      if (ogImage) {
-        const abs = absoluteUrl(ogImage, pageUrl);
-        if (abs && isPhotoUrl(abs)) uniquePush(images, abs, imageLimit);
+    // 1 + 2 + 3) Images: OpenGraph, JSON-LD, <img>/<source> (incl. srcset and
+    // lazy-load attributes) and full-size image links. Candidates are only
+    // resolved to JPEGs after the crawl, with content-type probes.
+    if (wantImages) {
+      const pageImages = collectImageGroups(html, pageUrl);
+      for (const candidate of pageImages.primary) {
+        uniquePush(primaryCandidates, candidate, 40);
+      }
+      for (const candidate of pageImages.secondary) {
+        uniquePush(listingCandidates, candidate, 40);
       }
     }
+
+    // Videos: OpenGraph, JSON-LD, tags and inline script JSON.
+    if (wantVideos) {
     const ogVideo =
       readMetaPair(html, "og:video") || readMetaPair(html, "og:video:url");
     if (ogVideo) uniquePush(videos, absoluteUrl(ogVideo, pageUrl), videoLimit);
 
-    // 2) JSON-LD image/contentUrl/video fields.
     for (const block of jsonLd) {
-      const candidates: unknown[] = [
-        block.image,
-        block.contentUrl,
-        block.thumbnail,
-        block.video,
-      ];
-      for (const candidate of candidates) {
+      for (const candidate of [block.contentUrl, block.video]) {
         const values = Array.isArray(candidate) ? candidate : [candidate];
         for (const value of values) {
           const raw =
             typeof value === "string" ? value : (value as any)?.url ?? null;
           if (!raw) continue;
           const abs = absoluteUrl(raw, pageUrl);
-          if (!abs) continue;
-          if (isFirstPage && isPhotoUrl(abs)) {
-            uniquePush(images, abs, imageLimit);
-          }
-          if (VIDEO_RE.test(abs)) uniquePush(videos, abs, videoLimit);
+          if (abs && VIDEO_RE.test(abs)) uniquePush(videos, abs, videoLimit);
         }
       }
     }
 
-    // 3) Generic img/source/video/a href scan.
-    const tagRe = /<(?:img|source|video|a)\b[^>]*>/gi;
+    const tagRe = /<(?:source|video|a)\b[^>]*>/gi;
     let tag: RegExpExecArray | null;
     while ((tag = tagRe.exec(html)) !== null) {
       const srcMatch = tag[0].match(
@@ -466,21 +800,64 @@ export async function scrapeProfile(
       if (!srcMatch) continue;
       const abs = absoluteUrl(decodeHtml(srcMatch[1]), pageUrl);
       if (!abs || abs.startsWith("data:")) continue;
-      if (isFirstPage && isPhotoUrl(abs) && !JUNK_IMG_RE.test(abs)) {
-        uniquePush(images, abs, imageLimit);
-      }
       if (VIDEO_RE.test(abs) || EMBED_RE.test(abs)) {
         uniquePush(videos, abs, videoLimit);
       }
     }
 
-    // 4) Inline script JSON (window state) — where most clip URLs live.
-    for (const scripted of extractVideosFromScripts(
-      html,
-      pageUrl,
-      videoLimit
-    )) {
+    for (const scripted of extractVideosFromScripts(html, pageUrl, videoLimit)) {
       uniquePush(videos, scripted, videoLimit);
+    }
+    }
+
+    // 4) Open the individual post pages: many sites keep the real image (and
+    //    extra clips) behind a thumbnail that only appears on the detail page.
+    const wantMoreImages =
+      wantImages && primaryCandidates.length + detailCandidates.length < 40;
+    const wantMoreVideos = wantVideos && videos.length < videoLimit;
+    if (detailPagesScanned < detailPages && (wantMoreImages || wantMoreVideos)) {
+      const detailLinks = collectDetailLinks(html, pageUrl, visited).filter(
+        (link) => !detailLinksTried.has(link)
+      );
+      for (const link of detailLinks) {
+        if (detailPagesScanned >= detailPages) break;
+        if (videos.length >= videoLimit && detailCandidates.length >= 40) break;
+        detailLinksTried.add(link);
+        let detailHtml: string;
+        try {
+          detailHtml = await fetchHtml(link);
+        } catch {
+          continue; // a dead post must not lose the rest of the scrape
+        }
+        detailPagesScanned += 1;
+        visited.add(link);
+        sourceUrls.push(link);
+        if (wantMoreImages) {
+          const detailImages = collectImageGroups(detailHtml, link);
+          for (const candidate of detailImages.primary) {
+            uniquePush(detailCandidates, candidate, 40);
+          }
+          for (const candidate of detailImages.secondary) {
+            uniquePush(detailCandidates, candidate, 40);
+          }
+        }
+        if (wantMoreVideos) {
+          for (const scripted of extractVideosFromScripts(
+            detailHtml,
+            link,
+            videoLimit
+          )) {
+            uniquePush(videos, scripted, videoLimit);
+          }
+          const detailVideo =
+            readMetaPair(detailHtml, "og:video") ||
+            readMetaPair(detailHtml, "og:video:url");
+          const detailVideoUrl = detailVideo
+            ? absoluteUrl(detailVideo, link)
+            : null;
+          if (detailVideoUrl) uniquePush(videos, detailVideoUrl, videoLimit);
+        }
+      }
     }
 
     // 5) Plain text excerpt for the AI writer, with tags stripped (page 1).
@@ -500,6 +877,25 @@ export async function scrapeProfile(
     currentUrl = findNextPage(html, pageUrl, visited);
   }
 
+  const orderedCandidates: string[] = [];
+  if (wantImages) {
+    for (const candidate of [
+      ...primaryCandidates,
+      ...detailCandidates,
+      ...listingCandidates,
+    ]) {
+      if (orderedCandidates.length >= 40) break;
+      if (!orderedCandidates.includes(candidate)) orderedCandidates.push(candidate);
+    }
+  }
+
+  const { images, rejected, checked } = await resolveImageCandidates(
+    orderedCandidates,
+    imageLimit,
+    startUrl,
+    options.maxImageChecks
+  );
+
   if (!title && !description && images.length === 0 && videos.length === 0) {
     throw new Error(
       "No usable profile data found on that page (it may render entirely in JavaScript)."
@@ -510,10 +906,14 @@ export async function scrapeProfile(
     sourceUrl: startUrl,
     title,
     description,
-    images: images.slice(0, imageLimit),
+    images,
     videos: videos.slice(0, videoLimit),
     textSnippet: textSnippet || undefined,
     pagesScanned,
     sourceUrls,
+    imageCandidates: orderedCandidates.length,
+    imageChecks: checked,
+    imagesRejected: rejected,
+    detailPagesScanned,
   };
 }

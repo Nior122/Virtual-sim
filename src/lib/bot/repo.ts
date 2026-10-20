@@ -5,10 +5,12 @@
 // ---------------------------------------------------------------------------
 import type { Env, PersonaDraft } from "./types";
 import {
+  countVideosByPersona,
   createPersonaRecord,
   createVideoRecord,
   deletePersonaVideo,
   getPersonaMediaForEdit,
+  listPersonaSummaries,
   listPersonaVideos,
   personaSlugExists,
   updatePersonaMediaColumns,
@@ -204,4 +206,57 @@ export async function updateProfileVideo(
     console.error("updateProfileVideo failed:", err);
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Listing every profile with its media counts (bot /profiles command)
+// ---------------------------------------------------------------------------
+export interface ProfileSummary {
+  name: string;
+  slug: string;
+  active: boolean;
+  imageCount: number;
+  videoCount: number;
+}
+
+/** Counts the images stored in the profile/cover/gallery columns. */
+function countPersonaImages(row: {
+  profileImage: string | null;
+  coverImage: string | null;
+  gallery: string | null;
+}): number {
+  const gallery = (row.gallery || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return (
+    (row.profileImage ? 1 : 0) + (row.coverImage ? 1 : 0) + gallery.length
+  );
+}
+
+/** All personas, newest first, with how many images and videos they have. */
+export async function listProfileSummaries(
+  env: Env
+): Promise<ProfileSummary[]> {
+  let personas;
+  let counts;
+  try {
+    personas = await listPersonaSummaries(env);
+    counts = await countVideosByPersona(env);
+  } catch (err) {
+    throw new Error(`Could not list profiles: ${(err as Error).message}`);
+  }
+
+  const videosByPersona = new Map<string, number>();
+  for (const row of counts) {
+    videosByPersona.set(row.personaId, Number(row.count) || 0);
+  }
+
+  return personas.map((row) => ({
+    name: row.name,
+    slug: row.slug,
+    active: row.active !== false,
+    imageCount: countPersonaImages(row),
+    videoCount: videosByPersona.get(row.id) ?? 0,
+  }));
 }
