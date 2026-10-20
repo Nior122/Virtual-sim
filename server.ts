@@ -37,6 +37,7 @@ import {
   sanitizeHumanChatOutput,
 } from "./src/utils/mediaRequest";
 import { evaluateMiniTaskAgent } from "./src/utils/taskAgent";
+import { toPlaybackUrl } from "./src/lib/video/playback";
 
 dotenv.config();
 
@@ -325,16 +326,17 @@ Keep your responses conversational and reasonably concise.`;
 // --------------------------------------------------
 app.get("/api/video-proxy", async (req, res) => {
   const videoUrl = req.query.url as string;
-  if (!videoUrl || !videoUrl.startsWith("https://cdn.leakgallery.com/")) {
+  if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
     return res.status(400).json({ error: "Invalid or missing URL" });
   }
 
   try {
+    const target = new URL(videoUrl);
+    const refererOverride = (req.query.referer as string) || undefined;
     const rangeHeader = req.headers["range"];
     const requestHeaders: Record<string, string> = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Referer": "https://leakgallery.com/",
-      "Origin": "https://leakgallery.com",
+      "Referer": refererOverride || `${target.origin}/`,
       "Accept": "*/*",
     };
     if (rangeHeader) requestHeaders["Range"] = rangeHeader;
@@ -658,16 +660,10 @@ app.get("/api/personas/:slug", async (req, res) => {
     });
     if (persona && persona.active) {
       const { systemPrompt, ...publicPersona } = persona;
-      const videosWithStreams = (publicPersona.videos || []).map((v) => {
-        let streamUrl = v.url;
-        if (v.url.includes("rubyvidhub") || v.url.includes("embed") || v.url.includes(".html")) {
-          streamUrl = `/api/hls-proxy?embedUrl=${encodeURIComponent(v.url)}`;
-        }
-        return {
-          ...v,
-          streamUrl
-        };
-      });
+      const videosWithStreams = (publicPersona.videos || []).map((v) => ({
+        ...v,
+        streamUrl: toPlaybackUrl(v.url),
+      }));
       return res.json({ ...publicPersona, videos: videosWithStreams });
     }
   } catch (error) {

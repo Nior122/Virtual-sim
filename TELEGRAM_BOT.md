@@ -39,15 +39,23 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 | 3rd–7th photo (up to 5) | `gallery` (comma-separated URLs) |
 | Video files / video URLs / scraped videos | `PersonaVideo` rows → the call screen |
 | Write-up text (+ scraped text) | Groq-generated `description`, bios, `personality`, `background`, `interests`, `speakingStyle`, `flirtLevel`, `systemPrompt`, etc. |
-| `/scrape <url> [video count] [max pages]` | Best-effort extraction of title, description, JPEG/PNG images and videos (including paginated pages) from a public profile |
+| `/scrape <url> [video count] [max pages]` | Best-effort extraction of title, description, JPEG images and videos (including paginated pages) from a public profile |
 
 ## Chat commands
 
 - `/newprofile` — start a fresh draft
 - send photos, videos, video URLs, and write-up text in any order
 - `/scrape https://example.com/profile` — pull reference data from a page
-- `/scrape https://example.com/profile 30 5` — ask for up to 30 videos across
-  up to 5 paginated pages (video count max 50, pages default 5, hard max 10)
+  (all videos it can find, up to 50)
+- `/scrape https://example.com/profile 30 5` — only 30 videos, across at most
+  5 paginated pages (video count max 50, pages default 5, hard max 10)
+- paste any profile link as a normal message — it is scraped and **merged**
+  into the draft that is already open (no `/scrape` needed, no `/newprofile`)
+- `/image <url>` and `/video <url>` — force-add a direct JPEG or video link
+  when a URL is ambiguous
+- `/links` — list every image and video URL currently in the draft
+- `/checkvideos <slug>` — probe an existing profile's stored video URLs and
+  report which ones have a real playable stream (read-only)
 - `/preview` — Groq writes the full profile; shows the summary
 - `/setname <name>`, `/setslug <slug>` — override generated values
 - `/status` — inspect the current draft
@@ -90,9 +98,10 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - **Scraping is best-effort.** Workers cannot run a headless browser, so pages
   behind Cloudflare browser checks or pure-JavaScript SPAs return a clear
   error. Static HTML, OpenGraph tags and JSON-LD work well.
-- **Only JPEG/PNG images are imported.** WebP/GIF thumbnails, SVG logos and
-  icons, sprites, favicons and placeholder graphics are discarded, so a
-  scrape returns the real profile photos and nothing else.
+- **Only JPEG images are imported.** PNG/WebP/GIF thumbnails, SVG logos and
+  icons, sprites, favicons and placeholder graphics are discarded (and a
+  non-JPEG link pasted in chat is refused with a message), so a scrape
+  returns the real profile photos and nothing else.
 - **Video URLs are also read from inline script JSON** (`window.__DATA__` and
   similar state blobs), which is where most sites keep their clip URLs. That
   is why one scrape can now find many videos instead of only the OpenGraph
@@ -110,6 +119,16 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - **Bot profile writing falls back to OpenRouter.** With both keys set, Groq is
   tried first and OpenRouter is used automatically if it is missing, errors,
   or returns unusable JSON.
+- **Everything lands in one draft until `/confirm`.** Photos, videos, video
+  URLs and pasted links all accumulate in the same per-chat draft; adding
+  material after `/preview` simply invalidates the preview so you can
+  regenerate it. `/newprofile` is what starts over.
+- **Video playback is proxied.** The call screen loads remote media through
+  the Pages Functions `/api/video-proxy` (Range-aware, adds a Referer for
+  hotlink-protected CDNs) and `/api/hls-proxy` (resolves HTML embed players
+  to their real stream and rewrites m3u8 playlists). That is why videos play
+  even when the origin blocks direct hotlinking. Telegram uploads stay on
+  `/api/media/<file_id>`.
 - **Slug uniqueness** is checked against Neon; collisions get an automatic
   `-2`, `-3` suffix.
 - Drafts are per Telegram chat and expire after 24 hours. Only file IDs the
@@ -117,6 +136,7 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - The Express `createPersonaSchema` in `server.ts` was also extended with the
   full field set, so the same payloads remain valid if the Express server is
   ever hosted again.
-- On Pages-only deployments the Express `/api/video-proxy` and
-  `/api/hls-proxy` routes do not exist; prefer direct MP4/WebM URLs and the
-  bot's own `/api/media` links over embed/HLS URLs.
+- The playback proxies now exist on Pages too (`functions/api/video-proxy.ts`,
+  `functions/api/hls-proxy.ts`, `functions/api/resolve-video-stream.ts`), so
+  embed and HLS URLs work on the static deployment exactly like they used to
+  on Express. Keep `PUBLIC_BASE_URL` pointed at the production domain.
