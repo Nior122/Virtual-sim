@@ -247,6 +247,19 @@ In your Telegram bot chat:
     stream first; anything with no playable stream is skipped and reported.
 11. Open that link, and start a call to confirm the videos play.
 
+### Changing a profile later (add / replace / delete media)
+
+1. `/edit <slug>` — the bot replies with the current images and videos,
+   numbered.
+2. Add material: send photos or video files, paste direct links, or paste a
+   profile page link to scrape it — everything is appended to that profile's
+   draft.
+3. Change or delete: `/replaceimage 1 <jpeg url>`, `/replacevideo 2 <url>`,
+   `/removeimage 3`, `/removevideo 1`, `/clearvideos`.
+4. `/save` — writes the changes to Neon and replies with the final lists.
+   `/cancel` discards them instead. Text fields (bio, personality, etc.) are
+   not changed by edit mode.
+
 ---
 
 ## Part 12 — Troubleshooting
@@ -265,6 +278,8 @@ In your Telegram bot chat:
 | `/scrape` says blocked or no data | The page uses a browser/Cloudflare challenge or renders only in JavaScript, which a Worker can't load. Send the media and write-up manually. |
 | `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. |
 | A copied image link is refused | The bot only accepts `.jpg/.jpeg`. Convert the file to JPEG and send it again. |
+| `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
+| `/save` removed videos I wanted | `/save` deletes video rows you removed with `/removevideo`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
 | Video shows a black frame / never starts | The call screen plays remote videos through `/api/video-proxy` and `/api/hls-proxy`; check Pages → Observability → Functions logs for a 4xx/5xx from those routes. Sources that never expose a real stream (login-walled players) cannot be resolved. |
 | `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |

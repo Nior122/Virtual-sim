@@ -7,8 +7,15 @@ import type { Env, PersonaDraft } from "./types";
 import {
   createPersonaRecord,
   createVideoRecord,
+  deletePersonaVideo,
+  getPersonaMediaForEdit,
+  listPersonaVideos,
   personaSlugExists,
+  updatePersonaMediaColumns,
+  updatePersonaVideo,
   type CreatePersonaRecordInput,
+  type PersonaMediaForEdit,
+  type PersonaVideoRow,
 } from "../db/neon";
 
 /** Returns a slug not already used by another persona. */
@@ -122,4 +129,79 @@ export function buildPersonaPayload(
     systemPrompt: draft.systemPrompt ?? null,
     active: true,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Editing an already-published profile (media only)
+// ---------------------------------------------------------------------------
+export type EditableProfile = PersonaMediaForEdit;
+
+/** Loads an existing profile (by slug) so the draft can edit its media. */
+export async function loadProfileForEdit(
+  env: Env,
+  slug: string
+): Promise<EditableProfile | null> {
+  try {
+    return await getPersonaMediaForEdit(env, slug);
+  } catch (err) {
+    throw new Error(`Could not load that profile: ${(err as Error).message}`);
+  }
+}
+
+/** Reads the persona's current video rows. */
+export async function loadProfileVideos(
+  env: Env,
+  personaId: string
+): Promise<PersonaVideoRow[]> {
+  try {
+    return await listPersonaVideos(env, personaId);
+  } catch (err) {
+    throw new Error(`Could not load that profile's videos: ${(err as Error).message}`);
+  }
+}
+
+/** Writes the profile/cover/gallery columns of an existing persona. */
+export async function saveProfileMedia(
+  env: Env,
+  personaId: string,
+  media: {
+    profileImage: string | null;
+    coverImage: string | null;
+    gallery: string[];
+  }
+): Promise<void> {
+  try {
+    await updatePersonaMediaColumns(env, personaId, media);
+  } catch (err) {
+    throw new Error(`Database rejected the image changes: ${(err as Error).message}`);
+  }
+}
+
+/** Removes one video row from an existing persona. */
+export async function removeProfileVideo(
+  env: Env,
+  personaId: string,
+  videoId: string
+): Promise<boolean> {
+  try {
+    return await deletePersonaVideo(env, personaId, videoId);
+  } catch (err) {
+    console.error("removeProfileVideo failed:", err);
+    return false;
+  }
+}
+
+/** Repoints one video row at a new URL/title. */
+export async function updateProfileVideo(
+  env: Env,
+  personaId: string,
+  videoId: string,
+  input: { url: string; title: string }
+): Promise<boolean> {
+  try {
+    return await updatePersonaVideo(env, personaId, videoId, input);
+  } catch (err) {
+    console.error("updateProfileVideo failed:", err);
+    return false;
+  }
 }
