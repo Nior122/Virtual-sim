@@ -49,11 +49,16 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
   (all videos it can find, up to 50)
 - `/scrape https://example.com/profile 30 5` — only 30 videos, across at most
   5 paginated pages (video count max 50, pages default 5, hard max 10)
+- `/scrape https://example.com/profile 30 5 4` — the third number is how many
+  individual post pages to open (default 4, max 6), which is where many sites
+  keep the real image behind a thumbnail
 - paste any profile link as a normal message — it is scraped and **merged**
   into the draft that is already open (no `/scrape` needed, no `/newprofile`)
 - `/image <url>` and `/video <url>` — force-add a direct JPEG or video link
   when a URL is ambiguous
 - `/links` — list every image and video URL currently in the draft
+- `/profiles [page]` — every profile with its slug plus image and video counts
+  (20 per page), e.g. `Ava — slug: ava · 5 image(s) · 12 video(s)`
 - `/checkvideos <slug>` — probe an existing profile's stored video URLs and
   report which ones have a real playable stream (read-only)
 
@@ -121,6 +126,16 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
 - **Scraping is best-effort.** Workers cannot run a headless browser, so pages
   behind Cloudflare browser checks or pure-JavaScript SPAs return a clear
   error. Static HTML, OpenGraph tags and JSON-LD work well.
+- **Images are found even without a `.jpg` in the URL.** OpenGraph,
+  JSON-LD, `<img>`, `<source srcset>` (largest size), lazy-load attributes
+  (`data-src`, `data-original`, `data-srcset`, …), `poster`, CSS
+  `background-image` and `data-bg*` thumbnails are all collected, and
+  extensionless CDN URLs are verified with a content-type probe (max 12 probes
+  per scrape). Only URLs the server actually serves as `image/jpeg` are kept.
+- **Post pages are opened for hidden main images.** Scrapes follow up to
+  `detailPages` (default 4, max 6) same-site post/gallery links and pull the
+  images and clips from those pages too — that is what fixes sites where the
+  main photo only appears after clicking a thumbnail.
 - **Only JPEG images are imported.** PNG/WebP/GIF thumbnails, SVG logos and
   icons, sprites, favicons and placeholder graphics are discarded (and a
   non-JPEG link pasted in chat is refused with a message), so a scrape

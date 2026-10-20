@@ -120,6 +120,12 @@ export interface ScrapedProfile {
   pagesScanned: number;
   /** Every page URL actually scanned, in order */
   sourceUrls: string[];
+  /** Image URLs seen on the pages (before JPEG verification) */
+  imageCandidates?: number;
+  /** Candidates dropped because they were not served as image/jpeg */
+  imagesRejected?: number;
+  /** Individual post pages opened to reach hidden main images/videos */
+  detailPagesScanned?: number;
 }
 
 export interface PersonaDraft {

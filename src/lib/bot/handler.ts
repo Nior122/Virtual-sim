@@ -26,8 +26,10 @@ import {
 } from "../video/playback";
 import { resolveStreamUrl } from "../video/resolve";
 import {
+  DEFAULT_DETAIL_PAGES,
   DEFAULT_MAX_PAGES,
   DEFAULT_VIDEO_LIMIT,
+  HARD_MAX_DETAIL_PAGES,
   HARD_MAX_PAGES,
   MAX_VIDEO_LIMIT,
   scrapeProfile,
@@ -36,6 +38,7 @@ import {
   addVideo,
   buildPersonaPayload,
   createPersona,
+  listProfileSummaries,
   loadProfileForEdit,
   loadProfileVideos,
   removeProfileVideo,
@@ -104,10 +107,11 @@ Then send, in any order:
  • Photos (1st = profile picture, 2nd = cover, next up to ${MAX_GALLERY} go to the gallery, ${MAX_IMAGES} total)
  • Videos as files (under ${TELEGRAM_DOWNLOAD_LIMIT_MB}MB) or paste direct video/embed URLs
  • Any write-up text — bios, traits, background. Multiple messages are combined
-/scrape <url> [video count] [max pages] — pull JPEG images and videos across paginated profile pages; no count = all (max 50), pages default 5 (e.g. /scrape https://x.com/p 30 5)
+/scrape <url> [videos] [pages] [post pages] — pull JPEG images and videos across paginated pages and open individual post pages for hidden main images; no count = all (max 50), pages default 5, post pages default 4 (e.g. /scrape https://x.com/p 30 5 4)
 Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
+/profiles [page] — every profile with its slug, image count and video count
 /edit <slug> — load an existing profile to change its images and videos
   then: send photos/videos or links (they are added), or use
   /removeimage <n>, /replaceimage <n> <url>, /removevideo <n>,
@@ -232,6 +236,12 @@ function mergeScraped(
     videos,
     sourceUrls,
     pagesScanned: (existing.pagesScanned ?? 0) + (incoming.pagesScanned ?? 0),
+    imageCandidates:
+      (existing.imageCandidates ?? 0) + (incoming.imageCandidates ?? 0),
+    imagesRejected:
+      (existing.imagesRejected ?? 0) + (incoming.imagesRejected ?? 0),
+    detailPagesScanned:
+      (existing.detailPagesScanned ?? 0) + (incoming.detailPagesScanned ?? 0),
     blocked: incoming.blocked ?? existing.blocked,
   };
 }
@@ -416,9 +426,10 @@ async function handleCommand(
         await sendMessage(
           env,
           chatId,
-          `Usage: /scrape https://example.com/profile [number of videos] [max pages]\n` +
-            `e.g. /scrape https://example.com/p 10 5 (videos max ${MAX_VIDEO_LIMIT}, ` +
-            `pages default ${DEFAULT_MAX_PAGES}, hard max ${HARD_MAX_PAGES})`
+          `Usage: /scrape https://example.com/profile [videos] [pages] [post pages]\n` +
+            `e.g. /scrape https://example.com/p 10 5 4 ` +
+            `(videos max ${MAX_VIDEO_LIMIT}, pages default ${DEFAULT_MAX_PAGES}/max ${HARD_MAX_PAGES}, ` +
+            `post pages default ${DEFAULT_DETAIL_PAGES}/max ${HARD_MAX_DETAIL_PAGES})`
         );
         return;
       }
@@ -442,19 +453,26 @@ async function handleCommand(
         1,
         HARD_MAX_PAGES
       );
+      // Third number: how many individual post pages to open for main images.
+      const detailPages = clampNumber(
+        numbers.length > 2 ? numbers[2] : DEFAULT_DETAIL_PAGES,
+        0,
+        HARD_MAX_DETAIL_PAGES
+      );
 
       const draft = await ensureDraft(env, chatId);
       await sendMessage(
         env,
         chatId,
         `Scraping that page for up to ${requested} video(s) across up to ` +
-          `${maxPages} page(s), one moment…\n` +
-          `(Want fewer? Send /scrape <url> <videos> <pages>.)`
+          `${maxPages} page(s), opening up to ${detailPages} post page(s) for hidden images…\n` +
+          `(Change it with /scrape <url> <videos> <pages> <post pages>.)`
       );
       try {
         const scraped = await scrapeProfile(targetUrl, {
           videoLimit: requested,
           maxPages,
+          detailPages,
         });
         draft.scraped = mergeScraped(draft.scraped, scraped);
         draft.generated = null;
@@ -479,7 +497,15 @@ async function handleCommand(
           env,
           chatId,
           `Scraped: ${scraped.title || "untitled"}\n` +
-            `• ${scraped.images.length} JPEG image(s)\n` +
+            `• ${scraped.images.length} JPEG image(s)` +
+            ((scraped.detailPagesScanned ?? 0) > 0
+              ? ` (opened ${scraped.detailPagesScanned} post page(s))`
+              : "") +
+            `\n` +
+            (scraped.images.length === 0 && (scraped.imageCandidates ?? 0) > 0
+              ? `  ↳ ${scraped.imageCandidates} image URL(s) found but ` +
+                `${scraped.imagesRejected ?? 0} were not served as JPEG\n`
+              : "") +
             `• Videos: ${videoLine}\n` +
             (scraped.description ? `• ${scraped.description.slice(0, 200)}\n` : "") +
             `\n` +
@@ -555,6 +581,56 @@ async function handleCommand(
           `/removeimage <n>, /removevideo <n>.\n` +
           nextStep(draft)
       );
+      return;
+    }
+
+    case "/profiles": {
+      let profiles;
+      try {
+        profiles = await listProfileSummaries(env);
+      } catch (err) {
+        await sendMessage(env, chatId, (err as Error).message);
+        return;
+      }
+      if (profiles.length === 0) {
+        await sendMessage(env, chatId, "No profiles yet. Create one with /newprofile.");
+        return;
+      }
+
+      const perPage = 20;
+      const pages = Math.ceil(profiles.length / perPage);
+      const requestedPage = parseIndex(arg) ?? 1;
+      const page = Math.min(Math.max(requestedPage, 1), pages);
+      const start = (page - 1) * perPage;
+      const slice = profiles.slice(start, start + perPage);
+
+      const totalImages = profiles.reduce((sum, p) => sum + p.imageCount, 0);
+      const totalVideos = profiles.reduce((sum, p) => sum + p.videoCount, 0);
+
+      const lines = [
+        `Profiles (${profiles.length}) — ${totalImages} images · ${totalVideos} videos`,
+        ``,
+        ...slice.map((profile, index) => {
+          const number = start + index + 1;
+          const status = profile.active ? "" : " (inactive)";
+          return (
+            `${number}. ${profile.name} — slug: ${profile.slug}${status}\n` +
+            `   ${profile.imageCount} image(s) · ${profile.videoCount} video(s)`
+          );
+        }),
+      ];
+      if (pages > 1) {
+        lines.push(
+          ``,
+          `Page ${page}/${pages}` +
+            (page < pages ? ` — send /profiles ${page + 1} for the next page` : "")
+        );
+      }
+      lines.push(
+        ``,
+        `Edit any of them with /edit <slug> · test playback with /checkvideos <slug>`
+      );
+      await sendMessage(env, chatId, lines.join("\n"));
       return;
     }
 
