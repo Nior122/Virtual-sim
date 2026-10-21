@@ -237,6 +237,62 @@ export function extractVideosFromScripts(
   return found;
 }
 
+/**
+ * Pull image URLs out of inline script JSON (`__NEXT_DATA__`,
+ * `window.__INITIAL_STATE__`, Nuxt payloads, …). JS-rendered galleries keep
+ * their real photo URLs here and nowhere in the markup, which is the usual
+ * reason a scrape reports "no JPEG images found".
+ *
+ * Two shapes are collected:
+ *  - literal `.jpg` / `.jpeg` URLs (accepted without a probe)
+ *  - `"image": "https://…/1280"` style keys without an extension (probed later)
+ */
+export function extractImagesFromScripts(
+  html: string,
+  base: string,
+  cap: number
+): string[] {
+  const found: string[] = [];
+  const literalRe =
+    /https?:\/\/[^"'\s<>()\\]+?\.(?:jpe?g)(?:\?[^"'\s<>()\\]*)?/gi;
+  const keyedRe =
+    /["'](?:image|imageUrl|image_url|photo|photoUrl|picture|pictureUrl|thumbnail|thumbnailUrl|src|url|mainImage|cover|coverImage|avatar)["']\s*:\s*["']((?:https?:)?\/\/[^"']+)["']/gi;
+
+  const scriptRe = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  let script: RegExpExecArray | null;
+  while ((script = scriptRe.exec(html)) !== null) {
+    if (found.length >= cap) break;
+    // Script JSON escapes slashes ("https:\/\/cdn…") and sometimes uses
+    // \u002F, so unescape both before matching.
+    const body = script[1]
+      .replace(/\\\//g, "/")
+      .replace(/\\u002[fF]/g, "/");
+    if (body.length < 20) continue;
+
+    literalRe.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = literalRe.exec(body)) !== null) {
+      const abs = absoluteUrl(match[0], base);
+      if (abs && isImageCandidate(abs)) uniquePush(found, abs, cap);
+      if (found.length >= cap) break;
+    }
+
+    keyedRe.lastIndex = 0;
+    while ((match = keyedRe.exec(body)) !== null) {
+      const raw = match[1].replace(/\\/g, "");
+      const abs = absoluteUrl(raw, base);
+      if (!abs) continue;
+      // Skip obvious non-images and HTML pages; extensionless CDN paths stay
+      // as candidates and get verified by the probe.
+      if (/\/(?:api|_next|static)\/[^/]*\.(?:js|css|json)(?:\?|$)/i.test(abs)) continue;
+      if (/\.(?:js|css|json|html?|php|mp4|webm|mov|m3u8|pdf|zip)(?:\?|$)/i.test(abs)) continue;
+      if (!isImageCandidate(abs)) continue;
+      uniquePush(found, abs, cap);
+    }
+  }
+  return found;
+}
+
 // ---------------------------------------------------------------------------
 // Image collection (thumbnails, srcset, lazyload attributes) + verification
 // ---------------------------------------------------------------------------
@@ -245,6 +301,8 @@ export interface ImageGroups {
   primary: string[];
   /** Thumbnails and gallery images from the markup. */
   secondary: string[];
+  /** Image URLs seen but impossible to use (WebP, PNG, GIF, …). */
+  nonJpeg: number;
 }
 
 /** Flat, ordered list of every image candidate on a page. */
@@ -265,11 +323,24 @@ export function collectImageCandidates(html: string, pageUrl: string): string[] 
 export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
   const primary: string[] = [];
   const secondary: string[] = [];
+  let nonJpeg = 0;
   const makePush = (target: string[]) => (raw: string | null) => {
     if (!raw || target.length >= 40) return;
     const abs = absoluteUrl(raw, pageUrl);
     if (!abs) return;
-    if (!isImageCandidate(abs)) return;
+    if (!isImageCandidate(abs)) {
+      // Count images the site offers in a format we cannot store, so an empty
+      // scrape can say "3 image(s) found but they are WebP/PNG".
+      if (
+        NON_JPEG_IMAGE_RE.test(abs) &&
+        !SVG_RE.test(abs) &&
+        !JUNK_IMG_RE.test(abs) &&
+        !abs.startsWith("data:")
+      ) {
+        nonJpeg += 1;
+      }
+      return;
+    }
     if (!target.includes(abs)) target.push(abs);
   };
   const pushPrimary = makePush(primary);
@@ -335,10 +406,42 @@ export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
     push(readAttr(tag[0], "content"));
   }
 
-  return { primary, secondary };
+  // Image URLs serialised into inline JSON (JS-rendered galleries). These are
+  // declared image fields, so they rank with the page's own main images.
+  for (const scripted of extractImagesFromScripts(html, pageUrl, 40)) {
+    pushPrimary(scripted);
+  }
+
+  return { primary, secondary, nonJpeg };
 }
 
-/** Probe a URL and report whether the server actually returns a JPEG. */
+/** Content types that can never be a JPEG — no body read needed. */
+const DEFINITELY_NOT_JPEG =
+  /^(?:image\/(?:png|webp|gif|svg|avif|bmp|tiff|x-icon|vnd\.microsoft\.icon)|video\/|audio\/|text\/html|application\/(?:json|xml|javascript|pdf|zip))/i;
+
+/** True when the response starts with the JPEG magic bytes FF D8 FF. */
+async function hasJpegMagic(res: Response): Promise<boolean> {
+  const reader = res.body?.getReader();
+  if (!reader) return false;
+  try {
+    const { value } = await reader.read();
+    if (!value || value.length < 3) return false;
+    return value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff;
+  } catch {
+    return false;
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+}
+
+/**
+ * Probe a URL and report whether the server actually returns a JPEG.
+ *
+ * Content-type alone is not reliable: plenty of CDNs answer with
+ * `application/octet-stream`, an empty type, or `text/html` on HEAD, while
+ * still serving a perfectly good JPEG. So the type is trusted when it is
+ * decisive and the first bytes are sniffed (FF D8 FF) otherwise.
+ */
 export async function isJpegResponse(
   url: string,
   referer: string
@@ -348,44 +451,77 @@ export async function isJpegResponse(
     Accept: "image/jpeg,image/*;q=0.8,*/*;q=0.5",
     Referer: referer,
   };
-  const isJpeg = (res: Response) => {
-    const type = (res.headers.get("content-type") || "").toLowerCase();
-    return type.startsWith("image/jpeg") || type.startsWith("image/jpg");
+
+  const decide = async (
+    res: Response,
+    mayReadBody: boolean
+  ): Promise<boolean> => {
+    const type = (res.headers.get("content-type") || "").toLowerCase().trim();
+    if (type.startsWith("image/jpeg") || type.startsWith("image/jpg")) {
+      return true;
+    }
+    if (DEFINITELY_NOT_JPEG.test(type)) return false;
+    // Unknown / generic type (octet-stream, empty, binary): sniff the bytes.
+    return mayReadBody ? hasJpegMagic(res) : false;
   };
 
-  const attempt = async (
-    method: "HEAD" | "GET",
-    extra: Record<string, string> = {}
-  ): Promise<boolean | null> => {
+  // 1) HEAD — cheap and decisive when the server sends a real image type.
+  try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
     try {
       const res = await fetch(url, {
-        method,
-        headers: { ...headers, ...extra },
+        method: "HEAD",
+        headers,
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const type = (res.headers.get("content-type") || "").toLowerCase();
+        if (type.startsWith("image/jpeg") || type.startsWith("image/jpg")) {
+          res.body?.cancel().catch(() => {});
+          return true;
+        }
+        // An HTML/JSON answer to HEAD is usually bot protection rather than
+        // the real file, so only image/video/audio types are decisive here.
+        const decisive =
+          DEFINITELY_NOT_JPEG.test(type) &&
+          !/^text\/html|^application\/json/.test(type);
+        if (decisive) {
+          res.body?.cancel().catch(() => {});
+          return false;
+        }
+      }
+      res.body?.cancel().catch(() => {});
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    // HEAD blocked or unsupported — fall through to a ranged GET.
+  }
+
+  // 2) Ranged GET: read just the header bytes and check the JPEG signature.
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { ...headers, Range: "bytes=0-63" },
         redirect: "follow",
         signal: controller.signal,
       });
       if (!res.ok && res.status !== 206) {
         res.body?.cancel().catch(() => {});
-        return null;
+        return false;
       }
-      const result = isJpeg(res);
-      // Do not download the image body: only the headers matter here.
-      res.body?.cancel().catch(() => {});
-      return result;
-    } catch {
-      return null;
+      return await decide(res, true);
     } finally {
       clearTimeout(timeout);
     }
-  };
-
-  const head = await attempt("HEAD");
-  if (head !== null && head) return true;
-  // Many CDNs reject HEAD or omit the type there: retry with a 1-byte GET.
-  const ranged = await attempt("GET", { Range: "bytes=0-0" });
-  return ranged === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -722,6 +858,7 @@ export async function scrapeProfile(
   let pagesScanned = 0;
   let detailPagesScanned = 0;
   let detailLinksTried = new Set<string>();
+  let nonJpegImages = 0;
   let title: string | null = null;
   let description: string | null = null;
   let textSnippet = "";
@@ -764,6 +901,7 @@ export async function scrapeProfile(
     // resolved to JPEGs after the crawl, with content-type probes.
     if (wantImages) {
       const pageImages = collectImageGroups(html, pageUrl);
+      nonJpegImages += pageImages.nonJpeg;
       for (const candidate of pageImages.primary) {
         uniquePush(primaryCandidates, candidate, 40);
       }
@@ -834,6 +972,7 @@ export async function scrapeProfile(
         sourceUrls.push(link);
         if (wantMoreImages) {
           const detailImages = collectImageGroups(detailHtml, link);
+          nonJpegImages += detailImages.nonJpeg;
           for (const candidate of detailImages.primary) {
             uniquePush(detailCandidates, candidate, 40);
           }
@@ -913,7 +1052,7 @@ export async function scrapeProfile(
     sourceUrls,
     imageCandidates: orderedCandidates.length,
     imageChecks: checked,
-    imagesRejected: rejected,
+    imagesRejected: rejected + nonJpegImages,
     detailPagesScanned,
   };
 }

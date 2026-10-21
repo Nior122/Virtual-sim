@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { getFilePath, buildFileDownloadUrl } from "./telegram";
 import { lookupMedia } from "./store";
+import { publicBaseUrl } from "./public-url";
 
 const MIME_BY_EXT: Record<string, string> = {
   jpg: "image/jpeg",
@@ -77,6 +78,6 @@ export function buildPublicMediaUrl(
   requestOrigin: string,
   fileId: string
 ): string {
-  const origin = (env.PUBLIC_BASE_URL || requestOrigin).replace(/\/+$/, "");
+  const origin = publicBaseUrl(env, requestOrigin);
   return `${origin}/api/media/${encodeURIComponent(fileId)}`;
 }

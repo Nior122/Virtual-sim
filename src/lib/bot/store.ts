@@ -1,9 +1,17 @@
-import type { BulkEntry, Draft, Env, MediaKind, StoredMedia } from "./types";
+import type {
+  BulkEntry,
+  Draft,
+  Env,
+  MediaKind,
+  PreparedBulkEntry,
+  StoredMedia,
+} from "./types";
 import { DRAFT_TTL_SECONDS } from "./types";
 
 const draftKey = (chatId: number) => `draft:${chatId}`;
 const mediaKey = (fileId: string) => `media:${fileId}`;
 const bulkKey = (chatId: number) => `bulk:${chatId}`;
+const reviewKey = (chatId: number) => `bulkreview:${chatId}`;
 
 export async function getDraft(env: Env, chatId: number): Promise<Draft | null> {
   return env.BOT_KV.get<Draft>(draftKey(chatId), "json");
@@ -103,4 +111,41 @@ export async function clearBulkQueue(
   chatId: number
 ): Promise<void> {
   await env.BOT_KV.delete(bulkKey(chatId));
+}
+
+// ---------------------------------------------------------------------------
+// Bulk review set — prepared profiles waiting for /confirm
+// ---------------------------------------------------------------------------
+export interface BulkReview {
+  /** Entries ready to be created, in the order they were prepared. */
+  entries: PreparedBulkEntry[];
+  /** Entries that could not be prepared (shown in the preview). */
+  failed: Array<{ raw: string; error: string }>;
+  createdAt: number;
+}
+
+export async function getBulkReview(
+  env: Env,
+  chatId: number
+): Promise<BulkReview | null> {
+  const review = await env.BOT_KV.get<BulkReview>(reviewKey(chatId), "json");
+  if (!review) return null;
+  return { entries: review.entries || [], failed: review.failed || [], createdAt: review.createdAt || Date.now() };
+}
+
+export async function saveBulkReview(
+  env: Env,
+  chatId: number,
+  review: BulkReview
+): Promise<void> {
+  await env.BOT_KV.put(reviewKey(chatId), JSON.stringify(review), {
+    expirationTtl: DRAFT_TTL_SECONDS,
+  });
+}
+
+export async function clearBulkReview(
+  env: Env,
+  chatId: number
+): Promise<void> {
+  await env.BOT_KV.delete(reviewKey(chatId));
 }

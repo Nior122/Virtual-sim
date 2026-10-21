@@ -9,25 +9,30 @@ import type {
 } from "./types";
 import { MAX_GALLERY, MAX_IMAGES, TELEGRAM_DOWNLOAD_LIMIT_MB } from "./types";
 import { sendMessage } from "./telegram";
+import { profileLink } from "./public-url";
 import {
   clearBulkQueue,
+  clearBulkReview,
   deleteDraft,
   ensureDraft,
   getBulkQueue,
+  getBulkReview,
   getDraft,
   registerMedia,
   saveBulkQueue,
+  saveBulkReview,
   saveDraft,
 } from "./store";
-import type { BulkQueue } from "./store";
+import type { BulkQueue, BulkReview } from "./store";
 import {
+  commitBulkEntry,
   MAX_BULK_ENTRIES,
   MAX_BULK_PER_CALL,
   parseBulkList,
-  runBulkEntry,
+  prepareBulkEntry,
   type BulkResult,
 } from "./bulk";
-import type { BulkEntry } from "./types";
+import type { BulkEntry, PreparedBulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
 import {
   isDirectVideoUrl,
@@ -125,9 +130,13 @@ Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
 /profiles [page] — every profile with its slug, image count and video count
-/bulk <list> — scrape up to 25 pages at once and create a profile from each
+/bulk <list> — prepare up to 25 profiles at once (nothing is created yet)
   separate entries with commas or newlines; "A & B" takes images from A and
-  videos from B; a single URL gives both. Then /bulknext continues the queue
+  videos from B; a single URL gives both. Then /bulknext prepares the rest
+/previewall — full write-ups + every image/video URL for the prepared batch
+  /preview <n> for one of them
+/confirm — create every prepared profile · /confirm 1,3 to pick some
+/skip <n> — drop a prepared profile · /bulkcancel — abandon the batch
 /edit <slug> — load an existing profile to change its images and videos
   then: send photos/videos or links (they are added), or use
   /removeimage <n>, /replaceimage <n> <url>, /removevideo <n>,
@@ -398,6 +407,10 @@ async function handleCommand(
       return;
 
     case "/newprofile": {
+      // Starting a single-profile draft abandons any bulk preview, so /confirm
+      // cannot create the wrong thing.
+      const pendingReview = await getBulkReview(env, chatId);
+      await clearBulkReview(env, chatId);
       const draft = await ensureDraft(env, chatId);
       draft.writeUp = "";
       draft.media = [];
@@ -413,7 +426,10 @@ async function handleCommand(
       await sendMessage(
         env,
         chatId,
-        "New draft started. Send photos, videos/URLs, and your write-up, then /preview."
+        "New draft started. Send photos, videos/URLs, and your write-up, then /preview." +
+          (pendingReview && pendingReview.entries.length > 0
+            ? `\n\n(${pendingReview.entries.length} bulk preview(s) were discarded, nothing was created.)`
+            : "")
       );
       return;
     }
@@ -432,8 +448,34 @@ async function handleCommand(
     }
 
     case "/status": {
-      const draft = await getExistingDraft(env, chatId);
-      if (!draft) return;
+      const review = await getBulkReview(env, chatId);
+      const queue = await getBulkQueue(env, chatId);
+      const bulkBits: string[] = [];
+      if (review && review.entries.length > 0) {
+        bulkBits.push(`${review.entries.length} profile(s) prepared and waiting`);
+      }
+      if (review && review.failed.length > 0) {
+        bulkBits.push(`${review.failed.length} entry(ies) failed`);
+      }
+      if (queue && queue.entries.length > 0) {
+        bulkBits.push(`${queue.entries.length} entry(ies) still to prepare`);
+      }
+      const draft = await getDraft(env, chatId);
+      if (bulkBits.length > 0) {
+        await sendMessage(
+          env,
+          chatId,
+          `Bulk status:\n${bulkBits.map((bit) => `• ${bit}`).join("\n")}\n\n` +
+            (review && review.entries.length > 0
+              ? `${formatReviewSummary(review)}\n\n${confirmHint(review)}`
+              : "Send /bulknext to prepare the queue, or /bulk to start over.")
+        );
+        if (!draft) return;
+      }
+      if (!draft) {
+        await sendMessage(env, chatId, "No active draft. Send /newprofile to start one.");
+        return;
+      }
       await sendMessage(env, chatId, statusLine(env, origin, draft));
       return;
     }
@@ -519,10 +561,12 @@ async function handleCommand(
               ? ` (opened ${scraped.detailPagesScanned} post page(s))`
               : "") +
             `\n` +
-            (scraped.images.length === 0 && (scraped.imageCandidates ?? 0) > 0
-              ? `  ↳ ${scraped.imageCandidates} image URL(s) found but ` +
-                `${scraped.imagesRejected ?? 0} were not served as JPEG\n`
-              : "") +
+            (scraped.images.length === 0 && (scraped.imagesRejected ?? 0) > 0
+              ? `  ↳ ${scraped.imagesRejected} image URL(s) were rejected — they are ` +
+                `WebP/PNG/GIF or not served as image/jpeg. This site does not offer JPEG photos.\n`
+              : scraped.images.length === 0 && (scraped.imageCandidates ?? 0) > 0
+                ? `  ↳ ${scraped.imageCandidates} image URL(s) found but none returned image/jpeg\n`
+                : "") +
             `• Videos: ${videoLine}\n` +
             (scraped.description ? `• ${scraped.description.slice(0, 200)}\n` : "") +
             `\n` +
@@ -711,7 +755,9 @@ async function handleCommand(
             `• https://site.com/p & https://site.com/videos → images from the first, videos from the second\n` +
             `• images: https://…  videos: https://…        → same thing with labels\n\n` +
             `Up to ${MAX_BULK_ENTRIES} entries. Each entry becomes its own profile.\n` +
-            `Links to your own site (/dreamgirl/<slug>) are read from the database.\n` +
+            `Links to your own site (/dreamgirl/<slug>) are read from the database.\n\n` +
+            `Every batch stops at a preview — nothing is created until you send\n` +
+            `/confirm (all) or /confirm 1,3 (some). /previewall shows the write-ups.\n` +
             `Cancel with /bulkcancel.`
         );
         return;
@@ -724,26 +770,59 @@ async function handleCommand(
       const queue = await getBulkQueue(env, chatId);
       if (!queue || queue.entries.length === 0) {
         await clearBulkQueue(env, chatId);
-        await sendMessage(env, chatId, "No queued bulk entries left. Send /bulk to start a new batch.");
+        await sendMessage(
+          env,
+          chatId,
+          "No queued bulk entries left. Send /bulk to start a new batch."
+        );
         return;
       }
-      await processBulkQueue(env, origin, chatId, queue);
+      await prepareBulk(env, origin, chatId);
+      return;
+    }
+
+    case "/bulkpreview":
+    case "/previewall": {
+      const shown = await previewBulk(env, chatId, arg || "all");
+      if (!shown) {
+        await sendMessage(
+          env,
+          chatId,
+          "Nothing prepared to preview. Send /bulk with your list first."
+        );
+      }
+      return;
+    }
+
+    case "/confirmall": {
+      await confirmBulk(env, origin, chatId, arg || "");
+      return;
+    }
+
+    case "/skip": {
+      await skipBulk(env, chatId, arg || "");
       return;
     }
 
     case "/bulkcancel": {
       const queue = await getBulkQueue(env, chatId);
+      const review = await getBulkReview(env, chatId);
       await clearBulkQueue(env, chatId);
+      await clearBulkReview(env, chatId);
       const pending = await getDraft(env, chatId);
       if (pending?.bulkAwaiting) {
         pending.bulkAwaiting = false;
         await saveDraft(env, pending);
       }
+      const queued = queue?.entries.length || 0;
+      const waiting = review?.entries.length || 0;
       await sendMessage(
         env,
         chatId,
-        queue && queue.entries.length > 0
-          ? `Bulk batch cancelled — ${queue.entries.length} entr${queue.entries.length === 1 ? "y was" : "ies were"} still queued.`
+        queued > 0 || waiting > 0
+          ? `Bulk batch cancelled — ${[queued > 0 ? `${queued} not prepared` : "", waiting > 0 ? `${waiting} previewed but not created` : ""]
+              .filter(Boolean)
+              .join(", ")}. Nothing was created.`
           : "No bulk batch to cancel."
       );
       return;
@@ -1046,15 +1125,28 @@ async function handleCommand(
       return;
     }
 
-    case "/preview":
+    case "/preview": {
+      // With a bulk review waiting, /preview <n> shows that prepared profile
+      // instead of generating a new single draft.
+      if (arg && /^\s*(?:all|\d[\d,\s]*)$/i.test(arg)) {
+        const shown = await previewBulk(env, chatId, arg);
+        if (shown) return;
+      }
       await runPreview(env, origin, chatId);
       return;
+    }
 
     case "/confirm": {
       const active = await getDraft(env, chatId);
       if (active?.edit) {
         // In edit mode "confirm" means "apply the changes".
         await runSave(env, origin, chatId);
+        return;
+      }
+      // A bulk preview is waiting: /confirm creates the prepared profiles.
+      const review = await getBulkReview(env, chatId);
+      if (review && (review.entries.length > 0 || review.failed.length > 0)) {
+        await confirmBulk(env, origin, chatId, arg || "");
         return;
       }
       await runConfirm(env, origin, chatId);
@@ -1086,45 +1178,132 @@ async function getExistingDraft(
 }
 
 // ---------------------------------------------------------------------------
-// Bulk generation: parse a list, then process as much as one invocation allows
+// Bulk generation
+//
+// Two stages, so nothing is ever created by accident:
+//   1. prepare — scrape + AI for up to MAX_BULK_PER_CALL entries, stored in a
+//      review set in KV. This is the preview.
+//   2. commit — /confirm writes the prepared profiles to the database.
 // ---------------------------------------------------------------------------
 /** Rough subrequest ceiling per webhook call (Workers limit is 50). */
 const BULK_SUBREQUEST_BUDGET = 40;
+/** Profiles written per /confirm call (each is a DB insert + video rows). */
+const MAX_BULK_COMMIT_PER_CALL = 6;
 
-function formatBulkResults(results: BulkResult[]): string[] {
-  return results.map((result, index) => {
-    const number = index + 1;
-    if (!result.ok) {
-      return `${number}. ✗ ${result.raw}\n   ${result.error || "failed"}`;
-    }
-    const bits = [
-      `${result.images ?? 0} image(s)`,
-      `${result.videos ?? 0} video(s)`,
-    ];
-    if (result.skippedVideos) bits.push(`${result.skippedVideos} video(s) skipped`);
-    if (result.usedFallbackText) bits.push("text fallback");
-    return (
-      `${number}. ✓ ${result.name} — slug: ${result.slug}\n` +
-      `   ${bits.join(" · ")}\n` +
-      `   ${result.link}`
-    );
+function progressBits(entry: PreparedBulkEntry): string {
+  const bits = [
+    `${entry.images.length} image(s)`,
+    `${entry.videos.length} video(s)`,
+  ];
+  if (entry.skippedVideos) bits.push(`${entry.skippedVideos} video(s) skipped`);
+  if (entry.usedFallbackText) bits.push("text fallback");
+  return bits.join(" · ");
+}
+
+/** Renumber entries so /confirm and /preview always match what was shown. */
+function renumber(review: BulkReview): void {
+  review.entries.forEach((entry, index) => {
+    entry.id = index + 1;
   });
 }
 
-/** Send a long report in Telegram-sized pieces. */
-async function sendLong(env: Env, chatId: number, text: string): Promise<void> {
-  const limit = 3800;
-  if (text.length <= limit) {
-    await sendMessage(env, chatId, text);
-    return;
+/** One summary line per prepared entry. */
+function formatReviewSummary(review: BulkReview): string {
+  const ready = review.entries.length;
+  const failed = review.failed.length;
+  if (ready === 0 && failed === 0) return "Nothing has been prepared yet.";
+
+  const lines = [`Bulk preview (${ready} ready${failed ? `, ${failed} failed` : ""})`, ""];
+  for (const [index, entry] of review.entries.entries()) {
+    lines.push(
+      `${index + 1}. ${entry.name} — slug: ${entry.slug}\n   ${progressBits(entry)}`
+    );
   }
-  let rest = text;
-  while (rest.length > 0) {
-    let cut = rest.lastIndexOf("\n", limit);
-    if (cut <= 0) cut = limit;
-    await sendMessage(env, chatId, rest.slice(0, cut));
-    rest = rest.slice(cut).replace(/^\n+/, "");
+  if (failed > 0) {
+    lines.push("");
+    for (const [index, failure] of review.failed.entries()) {
+      lines.push(`${ready + index + 1}. ✗ ${failure.raw}\n   ${failure.error}`);
+    }
   }
+  return lines.join("\n");
+}
+
+/** Full write-up + every URL, for /previewall and /preview <n>. */
+function formatPreparedFull(entry: PreparedBulkEntry, position: number): string {
+  const draft = entry.draft;
+  const location =
+    [draft.city, draft.country].filter(Boolean).join(", ") || "unknown";
+  const images =
+    formatUrlList("Images", entry.images) || "Images: none";
+  const videos =
+    formatUrlList("Videos", entry.videos) || "Videos: none";
+  return (
+    `${position}. ${draft.name} — slug: ${entry.slug}\n` +
+    `   ${progressBits(entry)}\n` +
+    `   Source: ${entry.imageSource}` +
+    (entry.videoSource !== entry.imageSource
+      ? `\n   Videos from: ${entry.videoSource}`
+      : "") +
+    `\n\n` +
+    `   Description: ${draft.description}\n` +
+    `   Age/Location: ${draft.age ?? "?"} / ${location}\n` +
+    `   Occupation: ${draft.occupation || "unknown"}\n` +
+    `   Personality: ${draft.personality}\n` +
+    `   Speaking: ${draft.speakingStyle}\n` +
+    `   Flirt level: ${draft.flirtLevel}/4 · Emojis: ${draft.emojiFrequency || "n/a"}\n\n` +
+    `   ${images.split("\n").join("\n   ")}\n` +
+    `   ${videos.split("\n").join("\n   ")}`
+  );
+}
+
+function formatCommitResults(results: BulkResult[]): string {
+  return results
+    .map((result, index) => {
+      const number = index + 1;
+      if (!result.ok) {
+        return `${number}. ✗ ${result.raw}\n   ${result.error || "failed"}`;
+      }
+      const bits = [
+        `${result.images ?? 0} image(s)`,
+        `${result.videos ?? 0} video(s)`,
+      ];
+      if (result.skippedVideos) bits.push(`${result.skippedVideos} video(s) skipped`);
+      if (result.usedFallbackText) bits.push("text fallback");
+      return (
+        `${number}. ✓ ${result.name} — slug: ${result.slug}\n` +
+        `   ${bits.join(" · ")}\n` +
+        `   ${result.link}`
+      );
+    })
+    .join("\n\n");
+}
+
+function confirmHint(review: BulkReview): string {
+  if (review.entries.length === 0) {
+    return review.failed.length > 0
+      ? "Nothing to confirm — every entry failed. Send /bulk with new links."
+      : "Nothing waiting to be confirmed.";
+  }
+  return (
+    `Send /confirm to create all ${review.entries.length}, ` +
+    `/confirm 1,3 to pick, /previewall for full write-ups and URLs, ` +
+    `/skip <n> to drop one, /cancelbulk to discard.`
+  );
+}
+
+async function showReview(
+  env: Env,
+  chatId: number,
+  review: BulkReview,
+  notes: string[]
+): Promise<void> {
+  const body = formatReviewSummary(review);
+  const footer = confirmHint(review);
+  await sendMessage(
+    env,
+    chatId,
+    body + (notes.length > 0 ? `\n\n${notes.join("\n")}` : "") + `\n\n${footer}`
+  );
 }
 
 async function startBulk(
@@ -1144,12 +1323,18 @@ async function startBulk(
     return;
   }
 
+  // A new batch replaces any unfinished one.
+  await clearBulkQueue(env, chatId);
+  await clearBulkReview(env, chatId);
+
   const queue: BulkQueue = {
     entries,
     createdAt: Date.now(),
     done: 0,
     failed: 0,
   };
+  await saveBulkQueue(env, chatId, queue);
+
   const notes: string[] = [];
   if (skipped.length > 0) {
     notes.push(`${skipped.length} line(s) had no usable URL and were skipped.`);
@@ -1158,63 +1343,300 @@ async function startBulk(
     notes.push(`Only the first ${MAX_BULK_ENTRIES} entries were kept.`);
   }
 
-  await saveBulkQueue(env, chatId, queue);
   await sendMessage(
     env,
     chatId,
-    `Bulk generation: ${entries.length} entr${entries.length === 1 ? "y" : "ies"} queued.\n` +
-      entries
-        .slice(0, 5)
-        .map((entry, index) =>
-          entry.imageSource === entry.videoSource
-            ? `${index + 1}. ${entry.imageSource}`
-            : `${index + 1}. images ${entry.imageSource} · videos ${entry.videoSource}`
-        )
-        .join("\n") +
-      (entries.length > 5 ? `\n…and ${entries.length - 5} more` : "") +
-      (notes.length > 0 ? `\n\n${notes.join("\n")}` : "") +
-      `\n\nWorking through them now…`
+    `Bulk: ${entries.length} entr${entries.length === 1 ? "y" : "ies"}. ` +
+      `Scraping and writing previews — nothing is created until you confirm.` +
+      (notes.length > 0 ? `\n${notes.join("\n")}` : "")
   );
-  await processBulkQueue(env, origin, chatId, queue);
+
+  // Previews are built with the request origin so the links are absolute.
+  await prepareBulk(env, origin, chatId, notes);
 }
 
-async function processBulkQueue(
+/**
+ * Prepare the next chunk of the queue and show the combined preview. Called by
+ * /bulk and /bulknext; repeated calls drain the queue.
+ */
+async function prepareBulk(
   env: Env,
   origin: string,
   chatId: number,
-  queue: BulkQueue
+  notes: string[] = []
 ): Promise<void> {
-  const batch: BulkResult[] = [];
+  const queue = (await getBulkQueue(env, chatId)) || {
+    entries: [],
+    createdAt: Date.now(),
+    done: 0,
+    failed: 0,
+  };
+  const review =
+    (await getBulkReview(env, chatId)) || {
+      entries: [],
+      failed: [],
+      createdAt: Date.now(),
+    };
+
+  const preparedBefore = review.entries.length;
   let spent = 0;
+  let attempted = 0;
 
   while (
     queue.entries.length > 0 &&
-    batch.length < MAX_BULK_PER_CALL &&
-    (batch.length === 0 || spent < BULK_SUBREQUEST_BUDGET)
+    attempted < MAX_BULK_PER_CALL &&
+    (attempted === 0 || spent < BULK_SUBREQUEST_BUDGET)
   ) {
     const entry = queue.entries.shift() as BulkEntry;
-    const result = await runBulkEntry(env, origin, entry);
-    spent += result.subrequests;
-    if (result.ok) queue.done += 1;
-    else queue.failed += 1;
-    batch.push(result);
+    attempted += 1;
+    try {
+      const prepared = await prepareBulkEntry(
+        env,
+        origin,
+        entry,
+        review.entries.length + 1
+      );
+      spent += prepared.subrequests;
+      review.entries.push(prepared);
+    } catch (err) {
+      spent += 1;
+      review.failed.push({ raw: entry.raw, error: (err as Error).message });
+    }
   }
 
-  const remaining = queue.entries.length;
-  if (remaining > 0) await saveBulkQueue(env, chatId, queue);
+  renumber(review);
+  if (queue.entries.length > 0) await saveBulkQueue(env, chatId, queue);
   else await clearBulkQueue(env, chatId);
 
-  const header =
-    `Bulk results (${batch.length})` +
-    (queue.done + queue.failed > batch.length
-      ? ` — batch total: ${queue.done} created, ${queue.failed} failed`
-      : "");
-  const footer =
-    remaining > 0
-      ? `\n\n${remaining} entr${remaining === 1 ? "y" : "ies"} left in the queue — send /bulknext to continue.`
-      : `\n\nQueue finished. /profiles lists everything; /edit <slug> changes images or videos.`;
+  const added = review.entries.length + review.failed.length - preparedBefore;
+  if (added === 0 && review.entries.length === 0) {
+    await clearBulkReview(env, chatId);
+    await sendMessage(
+      env,
+      chatId,
+      `Nothing could be prepared from that list.\n\n` +
+        (review.failed
+          .map((failure) => `✗ ${failure.raw}\n   ${failure.error}`)
+          .join("\n\n") || "No entries were queued.")
+    );
+    return;
+  }
 
-  await sendLong(env, chatId, `${header}\n\n${formatBulkResults(batch).join("\n\n")}${footer}`);
+  if (review.entries.length > 0) await saveBulkReview(env, chatId, review);
+  else await clearBulkReview(env, chatId);
+
+  if (queue.entries.length > 0) {
+    notes.push(
+      `${queue.entries.length} entr${queue.entries.length === 1 ? "y" : "ies"} still queued — /bulknext prepares the rest.`
+    );
+  }
+  await showReview(env, chatId, review, notes);
+}
+
+/** Parse "1,3 5" into 1-based positions, clamped to the review size. */
+function parsePositions(arg: string, size: number): number[] {
+  const positions: number[] = [];
+  for (const match of arg.match(/\d+/g) || []) {
+    const value = Number(match);
+    if (Number.isFinite(value) && value >= 1 && value <= size) {
+      if (!positions.includes(value)) positions.push(value);
+    }
+  }
+  return positions;
+}
+
+async function confirmBulk(
+  env: Env,
+  origin: string,
+  chatId: number,
+  arg: string
+): Promise<void> {
+  const review = await getBulkReview(env, chatId);
+  if (!review || review.entries.length === 0) {
+    await clearBulkReview(env, chatId);
+    await sendMessage(
+      env,
+      chatId,
+      review && review.failed.length > 0
+        ? `Nothing can be confirmed — all ${review.failed.length} entr${
+            review.failed.length === 1 ? "y" : "ies"
+          } failed:\n\n` +
+            review.failed
+              .map((failure) => `✗ ${failure.raw}\n   ${failure.error}`)
+              .join("\n\n") +
+            "\n\nSend /bulk with new links."
+        : "Nothing waiting to be confirmed. Start a batch with /bulk."
+    );
+    return;
+  }
+
+  renumber(review);
+  const wanted = arg.trim();
+  const positions = wanted ? parsePositions(wanted, review.entries.length) : [];
+  if (wanted && positions.length === 0) {
+    await sendMessage(
+      env,
+      chatId,
+      `I could not read "${wanted}". Use /confirm, /confirm 1,3 or /previewall.`
+    );
+    return;
+  }
+
+  const selected = positions.length > 0 ? positions : review.entries.map((e) => e.id);
+  // Resolve positions to entries *before* committing: removing entries while
+  // iterating stale positions used to skip profiles, because the remaining
+  // entries are renumbered after every commit.
+  const capped: PreparedBulkEntry[] = [];
+  let budget = 0;
+  for (const position of selected) {
+    if (capped.length >= MAX_BULK_COMMIT_PER_CALL) break;
+    const entry = review.entries.find((candidate) => candidate.id === position);
+    if (!entry || capped.includes(entry)) continue;
+    // Each profile is one insert plus one insert per video; keep the webhook
+    // inside the Workers subrequest budget.
+    const cost = 2 + entry.videos.length;
+    if (capped.length > 0 && budget + cost > BULK_SUBREQUEST_BUDGET) break;
+    budget += cost;
+    capped.push(entry);
+  }
+
+  await sendMessage(env, chatId, `Creating ${capped.length} profile(s)…`);
+
+  const results: BulkResult[] = [];
+  for (const entry of capped) {
+    const result = await commitBulkEntry(env, origin, entry);
+    results.push(result);
+    if (result.ok) {
+      review.entries = review.entries.filter((candidate) => candidate !== entry);
+    }
+  }
+  renumber(review);
+
+  const header = `Bulk confirm (${results.filter((r) => r.ok).length}/${results.length} created)`;
+  const remaining = review.entries.length;
+  const notAttempted = Math.max(0, selected.length - capped.length);
+  const footerParts: string[] = [];
+  if (notAttempted > 0) {
+    footerParts.push(
+      `${notAttempted} more still waiting — send /confirm again for the next batch.`
+    );
+  }
+  const queue = await getBulkQueue(env, chatId);
+  const queued = queue?.entries.length || 0;
+  if (remaining > 0) {
+    footerParts.push(
+      `${remaining} profile(s) still pending — /confirm to create them, /previewall to review.`
+    );
+  } else if (queued > 0) {
+    footerParts.push(
+      `${queued} entr${queued === 1 ? "y" : "ies"} still queued — /bulknext prepares them for preview.`
+    );
+  } else if (review.failed.length > 0) {
+    footerParts.push(
+      `${review.failed.length} entr${review.failed.length === 1 ? "y" : "ies"} failed and cannot be created.`
+    );
+  } else {
+    footerParts.push("Queue finished. /profiles lists everything; /edit <slug> changes images or videos.");
+  }
+
+  if (review.entries.length > 0 || review.failed.length > 0) {
+    await saveBulkReview(env, chatId, review);
+  } else {
+    await clearBulkReview(env, chatId);
+  }
+
+  await sendMessage(
+    env,
+    chatId,
+    `${header}\n\n${formatCommitResults(results)}\n\n${footerParts.join("\n")}`
+  );
+}
+
+async function previewBulk(
+  env: Env,
+  chatId: number,
+  arg: string
+): Promise<boolean> {
+  const review = await getBulkReview(env, chatId);
+  if (!review || review.entries.length === 0) return false;
+
+  renumber(review);
+  const wanted = arg.trim().toLowerCase();
+  const positions =
+    !wanted || wanted === "all"
+      ? review.entries.map((entry) => entry.id)
+      : parsePositions(wanted, review.entries.length);
+
+  if (positions.length === 0) {
+    await sendMessage(
+      env,
+      chatId,
+      `Use /previewall, /preview 1 or /preview 1,3 (you have ${review.entries.length} ready).`
+    );
+    return true;
+  }
+
+  const blocks = positions.map((position) => {
+    const entry = review.entries.find((candidate) => candidate.id === position);
+    return entry ? formatPreparedFull(entry, position) : "";
+  });
+  const header =
+    positions.length === review.entries.length
+      ? `Full preview (${positions.length})`
+      : `Preview (${positions.join(", ")})`;
+  await sendMessage(
+    env,
+    chatId,
+    `${header}\n\n${blocks.filter(Boolean).join("\n\n")}\n\n${confirmHint(review)}`
+  );
+  return true;
+}
+
+async function skipBulk(
+  env: Env,
+  chatId: number,
+  arg: string
+): Promise<void> {
+  const review = await getBulkReview(env, chatId);
+  if (!review || review.entries.length === 0) {
+    await sendMessage(env, chatId, "Nothing waiting to be skipped. Start a batch with /bulk.");
+    return;
+  }
+  renumber(review);
+  const wanted = arg.trim().toLowerCase();
+  const positions =
+    wanted === "all"
+      ? review.entries.map((entry) => entry.id)
+      : parsePositions(wanted, review.entries.length);
+
+  if (positions.length === 0) {
+    await sendMessage(
+      env,
+      chatId,
+      `Usage: /skip <n> — you have ${review.entries.length} prepared. /skip all clears them.`
+    );
+    return;
+  }
+
+  const removed = review.entries.filter((entry) => positions.includes(entry.id));
+  review.entries = review.entries.filter((entry) => !positions.includes(entry.id));
+  renumber(review);
+
+  if (review.entries.length > 0 || review.failed.length > 0) {
+    await saveBulkReview(env, chatId, review);
+  } else {
+    await clearBulkReview(env, chatId);
+  }
+
+  await sendMessage(
+    env,
+    chatId,
+    `Skipped ${removed.length} profile(s):\n` +
+      removed.map((entry) => `• ${entry.name} (${entry.slug})`).join("\n") +
+      (review.entries.length > 0
+        ? `\n\n${review.entries.length} still ready — ${confirmHint(review)}`
+        : "\n\nNothing left to confirm.")
+  );
 }
 
 /**
@@ -1307,12 +1729,11 @@ async function runSave(env: Env, origin: string, chatId: number): Promise<void> 
   }
 
   const galleryCount = Math.max(0, Math.min(images.length - 2, MAX_GALLERY));
-  const siteBase = (env.PUBLIC_BASE_URL || origin).replace(/\/+$/, "");
   await sendMessage(
     env,
     chatId,
     `Profile updated: ${edit.name}\n` +
-      `Link: ${siteBase}/dreamgirl/${edit.slug}\n` +
+      `Link: ${profileLink(env, origin, edit.slug)}\n` +
       `Images: ${images.length} (profile + cover + ${galleryCount} gallery)\n` +
       `Videos: ${cappedVideos.length} total · ${added} added · ${updated} replaced · ${removed} deleted` +
       (unresolved > 0
@@ -1541,12 +1962,11 @@ async function runConfirm(
   }
 
   const galleryCount = Math.max(0, Math.min(images.length - 2, MAX_GALLERY));
-  const siteBase = (env.PUBLIC_BASE_URL || origin).replace(/\/+$/, "");
   await sendMessage(
     env,
     chatId,
     `Profile created: ${generated.name}\n` +
-      `Link: ${siteBase}/dreamgirl/${slug}\n` +
+      `Link: ${profileLink(env, origin, slug)}\n` +
       `Images: ${images.length} (profile + cover + ${galleryCount} gallery)\n` +
       `Videos attached: ${attached}/${videos.length}` +
       (unresolved > 0

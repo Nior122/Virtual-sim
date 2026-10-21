@@ -261,11 +261,17 @@ In your Telegram bot chat:
    ```
    One URL per entry means images **and** videos come from it. `A & B` means
    images from A and videos from B (`images: … videos: …` also works).
-3. The bot creates a profile per entry and replies with the results. If the
-   batch is long it stops after a few entries — send `/bulknext` to continue,
-   or `/bulkcancel` to stop.
-4. Up to 25 entries per batch. Profiles are created immediately; `/profiles`
-   lists them and `/edit <slug>` fixes any of them.
+   Direct files are accepted too:
+   `https://cdn.site/ava-01.jpg & https://cdn.site/ava-clip.mp4`.
+3. The bot scrapes each entry and replies with a **preview** — nothing is created
+   yet. Check the names, slugs and counts, and send `/previewall` to read the
+   full write-ups plus every image and video URL it will use.
+4. Send `/confirm` to create all of them, `/confirm 1,3` to create only some,
+   `/skip <n>` to drop one, or `/bulkcancel` to throw the batch away.
+5. Up to 25 entries per batch, prepared 6 at a time — `/bulknext` prepares the
+   rest into the same preview. `/confirm` also creates up to 6 per call and
+   tells you how many are still pending. `/profiles` lists everything;
+   `/edit <slug>` fixes any of them.
 
 ### Changing a profile later (add / replace / delete media)
 
@@ -299,8 +305,12 @@ In your Telegram bot chat:
 | `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. The reply says how many image URLs were seen and rejected. Raise the post-page count (`/scrape <url> 50 5 6`) if the images sit inside posts. |
 | `/scrape` finds no images at all | The page may serve only WebP/PNG (convert or use `/image <jpeg url>`), or the main image is behind JavaScript. Try increasing post pages. |
 | A copied image link is refused | The bot only accepts `.jpg/.jpeg`. Convert the file to JPEG and send it again. |
-| `/bulk` skips an entry | That page had no JPEG images (the reply says how many image URLs were seen but not served as JPEG). Add `& <video page>` or use `/edit` after creating. |
-| Bulk stopped halfway | Only a few entries fit in one webhook call — send `/bulknext` to process the rest of the queue. |
+| `/bulk` skips an entry | That page had no usable images. The preview line says whether URLs were rejected as WebP/PNG or none were served as `image/jpeg`. Point that entry at a page with `.jpg` photos, or add `& <video page>` for the video half. |
+| Bulk stopped halfway | Only a few entries are prepared per webhook call — send `/bulknext` to prepare the rest, then `/confirm` again. |
+| `/confirm` after a bulk preview creates nothing | The preview must still be pending: `/status` lists it. `/newprofile` or `/bulkcancel` discards a preview on purpose. |
+| Long bot replies arrive in pieces | Replies over 4096 characters are split automatically (Telegram's limit); a missing final message was previously a silent `message is too long` error. |
+| Every profile chats the same / says "Dream Babe" | Fixed: `/api/chat` now loads the persona (name, personality, speaking style, `systemPrompt`) from Neon by id. Redeploy so the new Function is live. |
+| Confirmation link does nothing when tapped | `PUBLIC_BASE_URL` must include `https://`. The bot now adds the scheme automatically if it is missing — set the variable to `https://<project>.pages.dev` and redeploy. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
 | `/save` removed videos I wanted | `/save` deletes video rows you removed with `/removevideo`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
