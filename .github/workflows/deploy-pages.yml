@@ -1,0 +1,109 @@
+name: Deploy to Cloudflare Pages
+
+# Production deploys used to depend entirely on the Pages dashboard's
+# "Production branch" setting: if it pointed anywhere other than `main`, every
+# merge only produced *preview* deployments and the live site kept running old
+# code. This workflow deploys `main` itself, so a merge is always a production
+# deploy regardless of how the dashboard is configured.
+#
+# It needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN  - token with the "Cloudflare Pages: Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID - your Cloudflare account id
+# Until both exist the workflow skips the deploy with a warning instead of
+# failing, so `main` stays green while the dashboard integration keeps working.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two production deploys at once; the newest commit wins.
+concurrency:
+  group: pages-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_NAME: ${{ vars.CLOUDFLARE_PROJECT_NAME || 'dreambabe' }}
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        id: preflight
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping the Pages deploy - missing secret(s):$missing. Add them under Settings -> Secrets and variables -> Actions (API token needs 'Cloudflare Pages: Edit'). See TELEGRAM_BOT_SETUP.md Part 6b."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        if: steps.preflight.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.preflight.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.preflight.outputs.ready == 'true'
+        run: npx tsc --noEmit
+
+      - name: Build
+        if: steps.preflight.outputs.ready == 'true'
+        run: npm run build
+
+      # A direct upload only lands in production when its branch matches the
+      # project's production branch. Pinning that to `main` here removes the
+      # dashboard setting as a failure mode.
+      - name: Ensure the project's production branch is main
+        if: steps.preflight.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          response=$(curl -sS -X PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT_NAME}" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"production_branch":"main"}' || true)
+          echo "$response" | head -c 600
+          echo
+          if echo "$response" | grep -q '"success":true'; then
+            echo "Production branch is main."
+          else
+            echo "::warning::Could not set production_branch=main through the API. If the deployment below shows as a preview, set it in the dashboard: Pages -> ${PROJECT_NAME} -> Settings -> Builds & deployments -> Production branch."
+          fi
+
+      - name: Deploy to Pages
+        if: steps.preflight.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "3.114.0"
+          # `functions/` at the repo root is compiled into the deployment
+          # automatically, next to the static build in `dist/`.
+          command: >-
+            pages deploy dist
+            --project-name=${{ env.PROJECT_NAME }}
+            --branch=main
