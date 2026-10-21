@@ -53,7 +53,9 @@ import {
   HARD_MAX_DETAIL_PAGES,
   HARD_MAX_PAGES,
   MAX_VIDEO_LIMIT,
+  cleanUrlInput,
   inspectPage,
+  isJpegResponse,
   scrapeProfile,
 } from "./scrape";
 import {
@@ -502,7 +504,9 @@ async function handleCommand(
 
       // "<url> [video count] [max pages]" — bare integers after the URL.
       const tokens = arg.split(/\s+/).filter(Boolean);
-      const targetUrl = tokens[0];
+      // Trailing dots/commas from a pasted link must not become part of the
+      // user name (…/user/lanzii....... → 404).
+      const targetUrl = cleanUrlInput(tokens[0]);
       const numbers: number[] = [];
       for (const token of tokens.slice(1)) {
         if (/^\d+$/.test(token)) numbers.push(parseInt(token, 10));
@@ -569,10 +573,10 @@ async function handleCommand(
               : "") +
             `\n` +
             (scraped.images.length === 0 && (scraped.imagesRejected ?? 0) > 0
-              ? `  ↳ ${scraped.imagesRejected} image URL(s) were rejected — they are ` +
-                `WebP/PNG/GIF or not served as image/jpeg. This site does not offer JPEG photos.\n`
+              ? `  ↳ ${scraped.imagesRejected} image URL(s) were rejected — WebP/PNG/GIF, ` +
+                `a dead link, or not actually served as image/jpeg. Only working JPEGs are stored.\n`
               : scraped.images.length === 0 && (scraped.imageCandidates ?? 0) > 0
-                ? `  ↳ ${scraped.imageCandidates} image URL(s) found but none returned image/jpeg\n`
+                ? `  ↳ ${scraped.imageCandidates} image URL(s) found but none returned a real JPEG\n`
                 : "") +
             `• Videos: ${videoLine}\n` +
             (scraped.description ? `• ${scraped.description.slice(0, 200)}\n` : "") +
@@ -591,7 +595,7 @@ async function handleCommand(
     }
 
     case "/diag": {
-      const target = arg.trim();
+      const target = cleanUrlInput(arg.trim());
       if (!/^https?:\/\//i.test(target)) {
         await sendMessage(
           env,
@@ -606,6 +610,9 @@ async function handleCommand(
       try {
         const report = await inspectPage(target, 6);
         const lines: string[] = [`Diagnostics for ${target}`, ""];
+        if (target !== arg.trim()) {
+          lines.push(`(link cleaned: the trailing punctuation was removed)`, "");
+        }
         if (report.error) {
           lines.push(`✗ Fetch failed: ${report.error}`);
         } else {
@@ -621,6 +628,11 @@ async function handleCommand(
               "⚠ This is a Cloudflare/browser challenge page — a Worker cannot scrape it."
             );
           }
+          // The site's own error text (coomer/kemono answer 200 with an error
+          // page, which used to look like "built by JavaScript").
+          if (report.pageError) {
+            lines.push(`⚠ ${report.pageError}`);
+          }
           lines.push(
             `Image candidates: ${report.primary.length + report.secondary.length} usable · ` +
               `${report.nonJpegUrls.length} WebP/PNG`
@@ -633,7 +645,7 @@ async function handleCommand(
               const probe = report.probes.find((entry) => entry.url === url);
               const verdict =
                 probe === undefined
-                  ? "JPEG by URL"
+                  ? "not probed (beyond the probe budget)"
                   : probe.ok
                     ? "served as JPEG ✓"
                     : "NOT a JPEG ✗";
@@ -648,7 +660,9 @@ async function handleCommand(
           }
           if (
             report.primary.length + report.secondary.length === 0 &&
-            report.nonJpegUrls.length === 0
+            report.nonJpegUrls.length === 0 &&
+            !report.pageError &&
+            !report.archive
           ) {
             lines.push(
               "",
@@ -656,6 +670,22 @@ async function handleCommand(
                 ? "No image markup at all — the page is built by JavaScript. Copy a post/gallery link instead."
                 : "Image tags exist but no usable URL was found — paste this report and the page URL."
             );
+          }
+          // Coomer/Kemono JSON API: this is what a scrape actually uses.
+          if (report.archive) {
+            const archive = report.archive;
+            lines.push(
+              "",
+              `Archive API: ${archive.service}/${archive.user}` +
+                (archive.postId ? `/post/${archive.postId}` : "") +
+                (archive.error
+                  ? `\n  ✗ ${archive.error}`
+                  : `\n  ${archive.postCount} post(s) · ${archive.imageUrls} image URL(s) · ` +
+                    `${archive.videoUrls} video URL(s) · full-size first, thumbnail fallback`)
+            );
+            archive.sampleImages.forEach((url, index) => {
+              lines.push(`${index + 1}. ${url.slice(0, 150)}`);
+            });
           }
         }
         await sendMessage(env, chatId, lines.join("\n"));
@@ -671,7 +701,8 @@ async function handleCommand(
         await sendMessage(env, chatId, "Usage: /image https://example.com/photo.jpg");
         return;
       }
-      if (!IMAGE_URL_RE.test(arg)) {
+      const link = cleanUrlInput(arg);
+      if (!IMAGE_URL_RE.test(link)) {
         await sendMessage(
           env,
           chatId,
@@ -679,10 +710,20 @@ async function handleCommand(
         );
         return;
       }
-      if (!draft.imageLinks.includes(arg)) draft.imageLinks.push(arg);
+      // A .jpg name does not prove the file exists: verify before saving so
+      // the profile can never contain a broken image.
+      if (!(await isJpegResponse(link, origin))) {
+        await sendMessage(
+          env,
+          chatId,
+          `That link did not return a real JPEG (broken, blocked or another format), so it was NOT added:\n${link}`
+        );
+        return;
+      }
+      if (!draft.imageLinks.includes(link)) draft.imageLinks.push(link);
       draft.generated = null;
       await saveDraft(env, draft);
-      await sendMessage(env, chatId, `Added as JPEG image:\n${arg}`);
+      await sendMessage(env, chatId, `Added as JPEG image (verified):\n${link}`);
       return;
     }
 
@@ -692,17 +733,18 @@ async function handleCommand(
         await sendMessage(env, chatId, "Usage: /video https://example.com/clip.mp4");
         return;
       }
-      if (!draft.videoLinks.some((v) => v.url === arg)) {
-        draft.videoLinks.push({ kind: "url", url: arg, messageId: msg.message_id });
+      const link = cleanUrlInput(arg);
+      if (!draft.videoLinks.some((v) => v.url === link)) {
+        draft.videoLinks.push({ kind: "url", url: link, messageId: msg.message_id });
       }
       draft.generated = null;
       await saveDraft(env, draft);
       await sendMessage(
         env,
         chatId,
-        isPlayableVideoUrl(arg)
-          ? `Added as video (playable):\n${arg}`
-          : `Added as video (embed page — I will resolve the real stream on /confirm):\n${arg}`
+        isPlayableVideoUrl(link)
+          ? `Added as video (playable):\n${link}`
+          : `Added as video (embed page — I will resolve the real stream on /confirm):\n${link}`
       );
       return;
     }
@@ -2212,7 +2254,7 @@ async function handleIntake(
   let pageScrapes = 0;
 
   for (const raw of urls) {
-    const url = raw.replace(/[).,]+$/, "");
+    const url = cleanUrlInput(raw);
     const kind = classifyUrl(url);
 
     if (kind === "video") {
@@ -2241,8 +2283,16 @@ async function handleIntake(
         replies.push(`Image limit is ${MAX_IMAGES} — ${url} ignored.`);
         continue;
       }
+      // Verify every pasted JPEG URL too: a dead link would otherwise be
+      // stored and show up as a broken image on the profile.
+      if (!(await isJpegResponse(url, origin))) {
+        replies.push(
+          `That JPEG link did not return a real image (broken or blocked), so it was NOT added:\n${url}`
+        );
+        continue;
+      }
       if (!images.includes(url)) setWorkingImages(draft, [...images, url]);
-      replies.push(`Added to the draft as a JPEG image:\n${url}`);
+      replies.push(`Added to the draft as a JPEG image (verified):\n${url}`);
       continue;
     }
 

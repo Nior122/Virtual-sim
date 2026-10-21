@@ -145,9 +145,28 @@ The reply distinguishes the causes:
 
 | Reply | Meaning | Fix |
 |---|---|---|
-| `N image URL(s) were rejected — they are WebP/PNG/GIF…` | the page only offers WebP/PNG | the bot already retries `x.webp` → `x.jpg` and `?fm=jpg`; if that fails the site has no JPEG photos |
+| `N image URL(s) were rejected…` | the page only offers WebP/PNG, or the JPEG links are dead | the bot already retries `x.webp` → `x.jpg` and `?fm=jpg`, and drops every URL that does not answer as a real JPEG; only working images are stored |
 | `no JPEG images found` with 0 candidates | no image markup at all | the page is built by JavaScript — copy a post/gallery link, or run `/diag <url>` |
 | `The site blocked the request (HTTP 403)` | bot protection | not scrapable from a Worker |
+| `Creator "x" does not exist on coomer.st … Check the spelling` | the link has a typo, or trailing dots were pasted | trailing punctuation is stripped automatically; compare the user name with the site |
+
+### Coomer and Kemono links
+
+`coomer.st` / `kemono.cr` (and their mirrors) render their listings in the
+browser, so scanning the HTML finds nothing. Those links are read through the
+site's own JSON API instead — one of every post's photo, every attachment and
+every video:
+
+```
+/scrape https://coomer.st/onlyfans/user/lanzii
+→ full-size https://n1.coomer.st/data/1e/ea/1e…jpg first,
+  the site's own thumbnail https://img.coomer.st/thumbnail/data/1e/ea/1e…jpg
+  as the fallback when the full-size mirror does not answer
+```
+
+Each candidate is verified before it is stored, so a dead mirror falls back to
+the thumbnail instead of producing a broken image. A trailing-dots paste
+(`…/user/lanzii.......`) is cleaned before it is parsed.
 
 `/diag <url>` prints what the scraper sees, so an empty scrape can be explained
 instead of guessed:
@@ -165,6 +184,15 @@ Candidates found:
 
 WebP/PNG only (rejected, JPEG variant will be tried):
 • https://cdn.site.com/media/aa11….webp
+```
+
+For a coomer/kemono link it also reports the API answer:
+
+```
+Archive API: onlyfans/lanzii
+  50 post(s) · 100 image URL(s) · 12 video URL(s) · full-size first, thumbnail fallback
+1. https://n1.coomer.st/data/1e/ea/1e…jpg
+2. https://img.coomer.st/thumbnail/data/1e/ea/1e…jpg
 ```
 
 ### Checking the chat engine
