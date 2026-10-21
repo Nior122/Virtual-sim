@@ -18,6 +18,8 @@ const FEATURES = [
   "diag-command",
   "chatcheck-command",
   "env-model-providers",
+  "archive-api-scrape",
+  "verified-image-urls",
 ];
 
 export async function onRequestGet(): Promise<Response> {

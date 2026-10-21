@@ -21,7 +21,7 @@ import type {
   ScrapedProfile,
 } from "./types";
 import { MAX_GALLERY, MAX_IMAGES } from "./types";
-import { isPhotoUrl, scrapeProfile } from "./scrape";
+import { cleanUrlInput, isJpegResponse, isPhotoUrl, scrapeProfile } from "./scrape";
 import { generatePersonaDraft } from "./groq";
 import { addVideo, buildPersonaPayload, createPersona, uniqueSlug } from "./repo";
 import { getPublicPersonaBySlug } from "../db/neon";
@@ -35,7 +35,8 @@ export const MAX_BULK_PER_CALL = 6;
 const URL_TOKEN_RE = /https?:\/\/[^\s,;|<>]+/i;
 
 function trimUrl(value: string): string {
-  return value.trim().replace(/[).,'";]+$/, "");
+  // Handles the punctuation pasted links pick up (…/lanzii....... → …/lanzii).
+  return cleanUrlInput(value);
 }
 
 /** Extract the URLs of one entry, in order, ignoring duplicates. */
@@ -362,9 +363,15 @@ async function scrapeSource(
   mode: { images: boolean; videos: boolean },
   options: BulkRunOptions
 ): Promise<{ scraped: ScrapedProfile; subrequests: number }> {
-  // Direct media links need no fetch at all.
+  // Direct media links: one probe to prove the JPEG really exists, so a
+  // preview never promises a broken image.
   if (mode.images && isPhotoUrl(url)) {
-    return { scraped: directSourceProfile(url, "image"), subrequests: 0 };
+    if (!(await isJpegResponse(url, requestOrigin))) {
+      throw new Error(
+        `That image link did not return a real JPEG (broken or blocked): ${url}`
+      );
+    }
+    return { scraped: directSourceProfile(url, "image"), subrequests: 1 };
   }
   if (mode.videos && DIRECT_VIDEO_RE.test(url)) {
     return { scraped: directSourceProfile(url, "video"), subrequests: 0 };
@@ -383,7 +390,7 @@ async function scrapeSource(
     maxPages: options.maxPages ?? 2,
     detailPages: options.detailPages ?? 2,
     videoLimit: options.videoLimit ?? 50,
-    maxImageChecks: 10,
+    maxImageChecks: 14,
   });
   const subrequests =
     1 +
@@ -456,7 +463,7 @@ export async function prepareBulkEntry(
   if (images.length === 0) {
     throw new Error(
       imagesRejected > 0
-        ? `${imagesRejected} image URL(s) found but none are JPEG (WebP/PNG/GIF are rejected) — pick a page that serves .jpg photos`
+        ? `${imagesRejected} image URL(s) were found but none returned a real JPEG (WebP/PNG/GIF, dead or hotlink-protected links are rejected) — pick a page that serves working .jpg photos`
         : imageCandidates > 0
           ? `${imageCandidates} image URL(s) found but none were served as image/jpeg`
           : "no JPEG images found"

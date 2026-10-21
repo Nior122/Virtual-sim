@@ -58,8 +58,16 @@ export interface ScrapeOptions {
 export const DEFAULT_DETAIL_PAGES = 4;
 export const HARD_MAX_DETAIL_PAGES = 6;
 
-/** Content-type probes allowed per scrape (Workers subrequest budget). */
-const MAX_IMAGE_CHECKS = 12;
+/**
+ * Image probes allowed per scrape (Workers subrequest budget).
+ *
+ * Every stored image URL is verified now, so the budget has to cover the full
+ * image limit (7) plus dead links and WebP→JPEG recovery.
+ */
+const MAX_IMAGE_CHECKS = 18;
+
+/** Verification stops after this long and unverified URLs are dropped. */
+const PROBE_TIME_BUDGET_MS = 20000;
 
 /** True for URLs that are JPEG by their name/query, no network call needed. */
 export function isPhotoUrl(url: string): boolean {
@@ -154,6 +162,46 @@ function absoluteUrl(candidate: string, base: string): string | null {
 function stripHash(url: string): string {
   const index = url.indexOf("#");
   return index === -1 ? url : url.slice(0, index);
+}
+
+/**
+ * Normalise a URL typed into Telegram.
+ *
+ * A pasted link usually arrives with punctuation attached
+ * (`https://coomer.st/onlyfans/user/lanzii.......`) and Telegram's auto-linker
+ * happily includes it. Those characters become part of the path, so the site
+ * answers "creator not found" and the scrape comes back empty. Trailing
+ * sentence punctuation is removed; balanced parentheses/brackets (legal in
+ * URLs) are kept.
+ */
+export function cleanUrlInput(raw: string): string {
+  let value = (raw || "").trim().replace(/^<+/, "").replace(/>+$/, "");
+  const pairs: Array<[string, string]> = [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ];
+  for (;;) {
+    if (!value) break;
+    const last = value.slice(-1);
+    if (/[.,;:!?'"…»”’]/.test(last)) {
+      value = value.slice(0, -1);
+      continue;
+    }
+    let removed = false;
+    for (const [open, close] of pairs) {
+      if (last !== close) continue;
+      const opens = value.split(open).length - 1;
+      const closes = value.split(close).length - 1;
+      if (closes > opens) {
+        value = value.slice(0, -1);
+        removed = true;
+      }
+    }
+    if (removed) continue;
+    break;
+  }
+  return value;
 }
 
 function decodeHtml(value: string): string {
@@ -484,7 +532,7 @@ export async function isJpegResponse(
   // 1) HEAD — cheap and decisive when the server sends a real image type.
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const timeout = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url, {
         method: "HEAD",
@@ -519,7 +567,7 @@ export async function isJpegResponse(
   // 2) Ranged GET: read just the header bytes and check the JPEG signature.
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 6000);
     try {
       const res = await fetch(url, {
         method: "GET",
@@ -540,12 +588,6 @@ export async function isJpegResponse(
   }
 }
 
-/**
- * Turn ordered candidates into a JPEG image list. Explicit .jpg URLs are
- * accepted immediately; everything else (extensionless CDN paths, unknown
- * extensions) needs a JPEG content-type probe, bounded for the Workers
- * subrequest budget.
- */
 /**
  * Candidate JPEG URLs for an image the site only advertises as WebP/PNG.
  *
@@ -594,6 +636,15 @@ async function recoverJpegVariants(
   return { images, checked };
 }
 
+/**
+ * Turn ordered candidates into a verified JPEG image list.
+ *
+ * Nothing is stored on the strength of its file name: `.jpg`, extensionless
+ * CDN paths and everything else get a content-type/magic-byte probe, bounded
+ * for the Workers subrequest budget. Candidates are ordered best-first, so a
+ * thumbnail placed after its full-size file is only used when the full file
+ * is dead.
+ */
 export async function resolveImageCandidates(
   candidates: string[],
   limit: number,
@@ -606,13 +657,15 @@ export async function resolveImageCandidates(
   let checked = 0;
   let rejected = 0;
   const checkBudget = Math.max(0, Math.min(maxChecks, MAX_IMAGE_CHECKS));
+  const deadline = Date.now() + PROBE_TIME_BUDGET_MS;
+
+  // Every URL is verified, including ones that end in .jpg. A `.jpg` name is
+  // not proof of a working file: deleted posts, hotlink protection and dead
+  // CDN mirrors all answer with 404/HTML, and those URLs render as broken
+  // images in the profile. Anything that cannot be verified is dropped.
   for (const url of candidates) {
     if (images.length >= limit) break;
-    if (isPhotoUrl(url)) {
-      images.push(url);
-      continue;
-    }
-    if (checked >= checkBudget) break;
+    if (checked >= checkBudget || Date.now() > deadline) break;
     checked += 1;
     if (await isJpegResponse(url, referer)) images.push(url);
     else rejected += 1;
@@ -876,7 +929,370 @@ async function fetchHtml(url: string): Promise<string> {
     );
   }
 
+  const embeddedError = detectPageError(html);
+  if (embeddedError) throw new Error(embeddedError);
+
   return html;
+}
+
+// ---------------------------------------------------------------------------
+// Coomer / Kemono: read the JSON API instead of the JS-rendered listing
+// ---------------------------------------------------------------------------
+/**
+ * Coomer and Kemono build their listings in the browser, but both expose a
+ * public JSON API with the exact media paths of every post. Reading the API is
+ * more reliable than HTML parsing, yields the full-size file *and* the
+ * thumbnail for every photo, and also exposes the video files.
+ */
+const ARCHIVE_HOST_RE =
+  /^(?:www\.)?(?:coomer\.(?:st|su|party)|kemono\.(?:cr|su|party))$/i;
+
+export interface ArchiveTarget {
+  /** e.g. https://coomer.st */
+  origin: string;
+  /** e.g. coomer.st */
+  host: string;
+  /** e.g. onlyfans */
+  service: string;
+  /** e.g. lanzii */
+  user: string;
+  /** Set when the link points at a single post */
+  postId?: string;
+}
+
+/** Parse a coomer/kemono creator or post URL, or null for anything else. */
+export function parseArchiveUrl(url: string): ArchiveTarget | null {
+  try {
+    const parsed = new URL(cleanUrlInput(url));
+    if (!ARCHIVE_HOST_RE.test(parsed.hostname)) return null;
+    const match = parsed.pathname.match(
+      /^\/([a-z0-9_.-]+)\/user\/([^/]+?)(?:\/post\/([^/]+?))?\/?$/i
+    );
+    if (!match) return null;
+    return {
+      origin: parsed.origin,
+      host: parsed.hostname.replace(/^www\./i, "").toLowerCase(),
+      service: match[1].toLowerCase(),
+      user: decodeURIComponent(match[2]),
+      postId: match[3] ? decodeURIComponent(match[3]) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+interface ArchiveFile {
+  path?: string;
+  name?: string;
+}
+
+interface ArchivePost {
+  file?: ArchiveFile | null;
+  attachments?: ArchiveFile[] | null;
+  title?: string;
+  /** Older payloads call the post text `substring`, newer ones `content` */
+  substring?: string;
+  content?: string;
+}
+
+/** API failure; `fatal` means "do not bother trying the HTML page". */
+class ArchiveError extends Error {
+  fatal: boolean;
+  status?: number;
+  constructor(
+    message: string,
+    options: { fatal?: boolean; status?: number } = {}
+  ) {
+    super(message);
+    this.name = "ArchiveError";
+    this.fatal = options.fatal ?? false;
+    this.status = options.status;
+  }
+}
+
+/** Human-readable reason the site itself rendered inside a 200 response. */
+export function detectPageError(html: string): string | null {
+  const api = html.match(
+    /Failed to fetch from API because path\s*"([^"]+)"\s*doesn'?t exist[^<]{0,300}/i
+  );
+  if (api) {
+    const json = api[0].match(/\{[^{}]{0,200}\}/);
+    const detail = json ? json[0].replace(/\s+/g, " ").trim() : "";
+    return (
+      `The site says ${api[1]} does not exist` +
+      (detail ? ` — it answered ${detail}` : "") +
+      ". Check the spelling of the name in the link."
+    );
+  }
+  if (/\bCreator not found\b/i.test(html)) {
+    return "The site says that creator does not exist. Check the spelling of the name in the link.";
+  }
+  return null;
+}
+
+/** "onlyfans" → "OnlyFans"-ish label for messages. */
+function archiveServiceLabel(target: ArchiveTarget): string {
+  const service = target.service;
+  if (!service) return "That";
+  return service.charAt(0).toUpperCase() + service.slice(1);
+}
+
+/**
+ * One API request.
+ *
+ * Coomer/Kemono only answer the JSON API when `Accept` is `text/css` (this is
+ * what gallery-dl sends too); with a JSON Accept header the same URL 404s.
+ * A missing creator comes back either as a 404 with `{"error": …}` or, on some
+ * mirrors, as HTTP 200 with the literal body `not found`.
+ */
+async function requestArchivePosts(
+  url: string,
+  target: ArchiveTarget
+): Promise<ArchivePost[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "text/css",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    throw new ArchiveError(
+      `The archive API is unreachable (${(err as Error).message}).`
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const body = await res.text().catch(() => "");
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // not JSON
+  }
+
+  if (res.ok && /^\s*not found\s*$/i.test(body)) {
+    throw new ArchiveError(
+      `${archiveServiceLabel(target)} creator "${target.user}" does not exist on ` +
+        `${target.host}. Check the spelling of the username in the link.`,
+      { status: 404 }
+    );
+  }
+  if (res.status === 404) {
+    throw new ArchiveError(
+      `/api/v1/${target.service}/user/${target.user} answered 404` +
+        (parsed?.error ? `: ${parsed.error}` : "."),
+      { status: 404 }
+    );
+  }
+  if (!res.ok) {
+    throw new ArchiveError(`The archive API answered HTTP ${res.status}.`, {
+      status: res.status,
+    });
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new ArchiveError("The archive API did not return JSON.");
+  }
+
+  const posts: ArchivePost[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed.posts)
+      ? parsed.posts
+      : parsed.post
+        ? [parsed.post]
+        : [parsed];
+  return posts.filter((post) => post && typeof post === "object");
+}
+
+/**
+ * Read a creator's posts, newest first.
+ *
+ * The posts endpoint moved to `/user/<id>/posts` in August 2025; the old
+ * `/user/<id>` shape still answers on some mirrors, so both are tried. Only
+ * when *every* endpoint says 404 is the creator reported as missing.
+ */
+async function fetchArchivePosts(
+  target: ArchiveTarget,
+  offset = 0
+): Promise<ArchivePost[]> {
+  const base = `/api/v1/${target.service}/user/${encodeURIComponent(target.user)}`;
+  const endpoints = target.postId
+    ? [`${base}/post/${encodeURIComponent(target.postId)}`]
+    : [`${base}/posts?o=${offset}`, `${base}?o=${offset}`];
+
+  let lastError: ArchiveError | null = null;
+  let notFound = 0;
+
+  for (const endpoint of endpoints) {
+    try {
+      return await requestArchivePosts(`${target.origin}${endpoint}`, target);
+    } catch (err) {
+      const error =
+        err instanceof ArchiveError
+          ? err
+          : new ArchiveError((err as Error).message);
+      if (error.fatal) throw error;
+      if (error.status === 404) {
+        notFound += 1;
+        lastError = error;
+        continue;
+      }
+      lastError = error;
+    }
+  }
+
+  if (notFound === endpoints.length) {
+    throw new ArchiveError(
+      `${archiveServiceLabel(target)} creator "${target.user}" does not exist on ` +
+        `${target.host}. Check the spelling of the username in the link.`,
+      { fatal: true, status: 404 }
+    );
+  }
+  throw lastError ?? new ArchiveError("The archive API did not answer.");
+}
+
+/** Media paths of one post: the main file first, then attachments. */
+function archivePostPaths(post: ArchivePost): string[] {
+  const paths: string[] = [];
+  const files: Array<ArchiveFile | null | undefined> = [
+    post.file,
+    ...(Array.isArray(post.attachments) ? post.attachments : []),
+  ];
+  for (const file of files) {
+    const path = file?.path;
+    if (typeof path === "string" && path.startsWith("/") && !paths.includes(path)) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+/**
+ * Ordered media URLs for a set of posts.
+ *
+ * Every photo gets two candidates, best first: the full-size file on the
+ * `n1` mirror, then the site's own thumbnail on `img`. Both are verified, so a
+ * dead mirror falls through to the thumbnail instead of storing a broken link.
+ */
+function archiveMediaLists(
+  posts: ArchivePost[],
+  target: ArchiveTarget,
+  imageLimit: number,
+  videoLimit: number
+): { images: string[]; videos: string[]; nonJpeg: string[] } {
+  const thumbHost = `https://img.${target.host}/thumbnail`;
+  const fileHost = `https://n1.${target.host}`;
+  const images: string[] = [];
+  const videos: string[] = [];
+  const nonJpeg: string[] = [];
+
+  for (const post of posts) {
+    for (const path of archivePostPaths(post)) {
+      if (VIDEO_RE.test(path)) {
+        uniquePush(videos, `${fileHost}${path}`, videoLimit);
+        continue;
+      }
+      if (isPhotoUrl(path)) {
+        const cap = imageLimit * 2;
+        uniquePush(images, `${fileHost}${path}`, cap);
+        uniquePush(images, `${thumbHost}${path}`, cap);
+        continue;
+      }
+      if (NON_JPEG_IMAGE_RE.test(path) && !PHOTO_QUERY_RE.test(path)) {
+        uniquePush(nonJpeg, `${thumbHost}${path}`, 12);
+      }
+    }
+  }
+  return { images, videos, nonJpeg };
+}
+
+/** Scrape one coomer/kemono creator (or post) through the JSON API. */
+async function scrapeArchiveProfile(
+  target: ArchiveTarget,
+  startUrl: string,
+  options: {
+    imageLimit: number;
+    videoLimit: number;
+    wantImages: boolean;
+    wantVideos: boolean;
+    maxImageChecks?: number;
+  }
+): Promise<ScrapedProfile> {
+  let posts = await fetchArchivePosts(target, 0);
+  let lists = archiveMediaLists(posts, target, options.imageLimit, options.videoLimit);
+
+  // A second API page only when videos are still short (photos are covered by
+  // the first page).
+  if (
+    !target.postId &&
+    options.wantVideos &&
+    lists.videos.length < options.videoLimit &&
+    posts.length >= 20
+  ) {
+    try {
+      const more = await fetchArchivePosts(target, posts.length);
+      if (more.length > 0) {
+        posts = [...posts, ...more];
+        lists = archiveMediaLists(posts, target, options.imageLimit, options.videoLimit);
+      }
+    } catch {
+      // keep what the first page gave us
+    }
+  }
+
+  if (posts.length === 0) {
+    throw new ArchiveError("The archive API returned no posts for that creator.");
+  }
+
+  const resolved = options.wantImages
+    ? await resolveImageCandidates(
+        lists.images,
+        options.imageLimit,
+        startUrl,
+        options.maxImageChecks,
+        lists.nonJpeg
+      )
+    : { images: [] as string[], checked: 0, rejected: 0 };
+
+  if (options.wantImages && lists.images.length > 0 && resolved.images.length === 0) {
+    // Different media host than expected (e.g. another mirror) — let the HTML
+    // scraper try before giving up.
+    throw new ArchiveError(
+      "The archive API listed images but none of its media URLs returned a JPEG."
+    );
+  }
+
+  const texts = posts
+    .map((post) =>
+      [post.title, post.substring, post.content]
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter(Boolean)
+        .join(" — ")
+    )
+    .filter(Boolean);
+  const firstText = texts.find((text) => text.length > 0);
+
+  return {
+    sourceUrl: startUrl,
+    title: `${target.user} — ${target.service}`,
+    description: firstText ? firstText.slice(0, 300) : undefined,
+    images: resolved.images,
+    videos: options.wantVideos ? lists.videos.slice(0, options.videoLimit) : [],
+    textSnippet: texts.join("\n").slice(0, MAX_TEXT) || undefined,
+    pagesScanned: 1,
+    sourceUrls: [startUrl],
+    imageCandidates: options.wantImages ? lists.images.length : 0,
+    imageChecks: resolved.checked,
+    imagesRejected: resolved.rejected,
+    detailPagesScanned: 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -896,6 +1312,19 @@ export interface PageDiagnostics {
   nonJpegUrls: string[];
   probes: Array<{ url: string; ok: boolean }>;
   error?: string;
+  /** Error the site rendered inside a 200 response (e.g. "Creator not found") */
+  pageError?: string;
+  /** Coomer/Kemono JSON API summary, when the URL is one of those sites */
+  archive?: {
+    service: string;
+    user: string;
+    postId?: string;
+    postCount: number;
+    imageUrls: number;
+    videoUrls: number;
+    sampleImages: string[];
+    error?: string;
+  };
 }
 
 /**
@@ -908,8 +1337,10 @@ export async function inspectPage(
   url: string,
   maxProbes = 6
 ): Promise<PageDiagnostics> {
+  const target = cleanUrlInput(url);
+  const archiveTarget = parseArchiveUrl(target);
   const result: PageDiagnostics = {
-    url,
+    url: target,
     status: 0,
     contentType: "",
     bytes: 0,
@@ -927,7 +1358,7 @@ export async function inspectPage(
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let html = "";
   try {
-    const res = await fetch(url, {
+    const res = await fetch(target, {
       headers: {
         "User-Agent": BROWSER_UA,
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -954,20 +1385,53 @@ export async function inspectPage(
     );
   result.imgTags = (html.match(/<img\b/gi) || []).length;
   result.sourceTags = (html.match(/<source\b/gi) || []).length;
+  result.pageError = detectPageError(html) || undefined;
 
-  const groups = collectImageGroups(html, url);
+  const groups = collectImageGroups(html, target);
   result.primary = groups.primary.slice(0, 8);
   result.secondary = groups.secondary.slice(0, 8);
   result.nonJpegUrls = groups.nonJpegUrls.slice(0, 8);
 
-  const toProbe = [...groups.primary, ...groups.secondary]
-    .filter((candidate) => !isPhotoUrl(candidate))
-    .slice(0, Math.max(0, Math.min(maxProbes, 8)));
+  // Every candidate is verified by the scraper now, so every candidate is
+  // probed here too — including the ones that merely end in .jpg.
+  const toProbe = [...groups.primary, ...groups.secondary].slice(
+    0,
+    Math.max(0, Math.min(maxProbes, 8))
+  );
   for (const candidate of toProbe) {
     result.probes.push({
       url: candidate,
-      ok: await isJpegResponse(candidate, url),
+      ok: await isJpegResponse(candidate, target),
     });
+  }
+
+  // Coomer/Kemono: the listing is JS-rendered, so report the JSON API answer
+  // — that is what a real scrape uses.
+  if (archiveTarget) {
+    try {
+      const posts = await fetchArchivePosts(archiveTarget, 0);
+      const lists = archiveMediaLists(posts, archiveTarget, MAX_IMAGES, 5);
+      result.archive = {
+        service: archiveTarget.service,
+        user: archiveTarget.user,
+        postId: archiveTarget.postId,
+        postCount: posts.length,
+        imageUrls: lists.images.length,
+        videoUrls: lists.videos.length,
+        sampleImages: lists.images.slice(0, 4),
+      };
+    } catch (err) {
+      result.archive = {
+        service: archiveTarget.service,
+        user: archiveTarget.user,
+        postId: archiveTarget.postId,
+        postCount: 0,
+        imageUrls: 0,
+        videoUrls: 0,
+        sampleImages: [],
+        error: (err as Error).message,
+      };
+    }
   }
 
   return result;
@@ -1014,9 +1478,10 @@ export async function scrapeProfile(
   const wantImages = options.images !== false;
   const wantVideos = options.videos !== false;
 
+  const cleanedUrl = cleanUrlInput(url);
   let parsedUrl: URL;
   try {
-    parsedUrl = new URL(url);
+    parsedUrl = new URL(cleanedUrl);
   } catch {
     throw new Error("That doesn't look like a valid URL.");
   }
@@ -1025,6 +1490,28 @@ export async function scrapeProfile(
   }
 
   const startUrl = stripHash(parsedUrl.toString());
+
+  // Coomer/Kemono expose a JSON API with the exact media paths, so use it
+  // instead of the JS-rendered listing. A "creator not found" answer is
+  // definitive; any other API problem falls back to HTML scraping.
+  const archive = parseArchiveUrl(startUrl);
+  if (archive) {
+    try {
+      return await scrapeArchiveProfile(archive, startUrl, {
+        imageLimit,
+        videoLimit,
+        wantImages,
+        wantVideos,
+        maxImageChecks: options.maxImageChecks,
+      });
+    } catch (err) {
+      if (err instanceof ArchiveError && err.fatal) throw err;
+      console.warn(
+        `Archive API scrape failed for ${startUrl}, falling back to HTML:`,
+        (err as Error).message
+      );
+    }
+  }
   // Ranked image candidates: the page's own og/twitter/JSON-LD image first,
   // then images pulled from individual post pages (where the real photo often
   // lives), then listing thumbnails/lazy backgrounds.
