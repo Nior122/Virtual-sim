@@ -77,18 +77,56 @@ images: https://site.com/zoe  videos: https://site.com/zoe/clips
   only splits when a URL follows it, so `?a=1&b=2` query strings are safe.
 - **One URL per entry** → images *and* videos are scraped from that page.
 - **`A & B`** (or `images: A videos: B`) → images from A, videos from B.
-- Up to **25 entries** per batch; they are processed 6 at a time within a
-  subrequest budget, and the reply says how many are left. Send `/bulknext` to
-  continue, `/bulkcancel` to stop.
+- Either half can be a **direct file**: `https://cdn/ava-01.jpg` and
+  `https://cdn/clip.mp4` are used as-is, no page fetch needed — so an entry can
+  be exactly "the image URL & the video URL".
+- Up to **25 entries** per batch; 6 are prepared per call within a subrequest
+  budget. Send `/bulknext` to prepare the rest.
 - Links to **your own site** (`/dreamgirl/<slug>`, `/call/<slug>`) are read
   straight from Neon instead of being scraped, because the site renders in the
   browser.
-- Each entry is reported as:
-  `1. ✓ Ava — slug: ava` / `5 image(s) · 12 video(s)` / the live link, or
-  `2. ✗ https://… — no JPEG images found`.
-- If the AI provider is unavailable, the profile is still created from the
-  scraped title/description and marked `text fallback` — run `/edit` or
-  regenerate that profile later.
+
+#### Nothing is created until you confirm
+
+`/bulk` stops at a preview — no database writes happen while scraping:
+
+```
+Bulk preview (3 ready, 1 failed)
+
+1. Ava — slug: ava
+   6 image(s) · 4 video(s)
+2. Mia — slug: mia
+   3 image(s) · 2 video(s) · 1 video(s) skipped
+3. Zoe — slug: zoe
+   5 image(s) · 0 video(s) · text fallback
+
+4. ✗ https://site.com/x
+   no JPEG images found
+
+Send /confirm to create all 3, /confirm 1,3 to pick, /previewall for full
+write-ups and URLs, /skip <n> to drop one, /cancelbulk to discard.
+```
+
+| Command | What it does |
+| --- | --- |
+| `/confirm` | Create **every** prepared profile (up to 6 per call) |
+| `/confirm 1,3` | Create only those positions |
+| `/confirmall` | Same as `/confirm` |
+| `/previewall` | Full write-up plus every image and video URL for the batch |
+| `/preview <n>` | Same, for one prepared profile |
+| `/bulknext` | Prepare the next 6 queued entries into the same preview |
+| `/skip <n>` | Drop a prepared profile without creating it (`/skip all` clears them) |
+| `/bulkcancel` | Discard the queue and the preview — nothing is created |
+| `/status` | Shows the prepared batch as well as the single draft |
+
+- Slugs shown in the preview are **not reserved**; at confirm time a taken slug
+  gets a numeric suffix (`ava-2`), exactly like the single-profile flow.
+- `/newprofile` discards a pending bulk preview, so `/confirm` can never create
+  the wrong thing.
+- A prepared batch is kept in KV (`bulkreview:<chatId>`) for the same TTL as a
+  draft, so you can review and confirm later.
+- If the AI provider is unavailable, the profile is still prepared from the
+  scraped title/description and marked `text fallback`.
 - `/checkvideos <slug>` — probe an existing profile's stored video URLs and
   report which ones have a real playable stream (read-only)
 

@@ -16,7 +16,13 @@ export async function callTelegram<T = any>(
     });
     const data = (await res.json()) as any;
     if (!data.ok) {
-      console.error(`Telegram ${method} failed:`, data.description);
+      // Log the full payload: "message is too long" / "chat not found" are
+      // the usual causes and were previously invisible.
+      console.error(
+        `Telegram ${method} failed: ${data.description} | payload ${JSON.stringify(
+          payload
+        ).slice(0, 400)}`
+      );
       return null;
     }
     return data.result as T;
@@ -26,17 +32,56 @@ export async function callTelegram<T = any>(
   }
 }
 
-export function sendMessage(
+/**
+ * Telegram rejects anything over 4096 characters with "message is too long"
+ * and the message is silently lost, so long replies are split on paragraph /
+ * line boundaries before sending. Splitting lives here so every reply in the
+ * bot is safe, wherever it was built.
+ */
+export const TELEGRAM_TEXT_LIMIT = 3800;
+
+export function splitForTelegram(
+  text: string,
+  limit = TELEGRAM_TEXT_LIMIT
+): string[] {
+  if (text.length <= limit) return [text];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > 0) {
+    if (rest.length <= limit) {
+      chunks.push(rest);
+      break;
+    }
+    // Prefer a paragraph break, then a line break, then a hard cut.
+    let cut = rest.lastIndexOf("\n\n", limit);
+    if (cut <= 0) cut = rest.lastIndexOf("\n", limit);
+    if (cut <= 0) cut = limit;
+    chunks.push(rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\n+/, "");
+  }
+  return chunks;
+}
+
+/** Sends a message, splitting it if needed. True when every chunk arrived. */
+export async function sendMessage(
   env: Env,
   chatId: number,
   text: string
-): Promise<unknown> {
-  return callTelegram(env, "sendMessage", {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-  });
+): Promise<boolean> {
+  let ok = true;
+  for (const chunk of splitForTelegram(text)) {
+    const result = await callTelegram(env, "sendMessage", {
+      chat_id: chatId,
+      text: chunk,
+      disable_web_page_preview: true,
+    });
+    if (!result) ok = false;
+  }
+  return ok;
 }
+
+/** Alias kept for readability at call sites that build very long replies. */
+export const sendLongMessage = sendMessage;
 
 export interface TelegramFileInfo {
   file_id: string;

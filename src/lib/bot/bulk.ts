@@ -17,14 +17,16 @@ import type {
   BulkEntry,
   Env,
   PersonaDraft,
+  PreparedBulkEntry,
   ScrapedProfile,
 } from "./types";
 import { MAX_GALLERY, MAX_IMAGES } from "./types";
-import { scrapeProfile } from "./scrape";
+import { isPhotoUrl, scrapeProfile } from "./scrape";
 import { generatePersonaDraft } from "./groq";
 import { addVideo, buildPersonaPayload, createPersona, uniqueSlug } from "./repo";
 import { getPublicPersonaBySlug } from "../db/neon";
 import { newPlaybackBudget, prepareVideoUrls } from "./videos";
+import { profileLink, publicBaseUrl } from "./public-url";
 
 export const MAX_BULK_ENTRIES = 25;
 /** Entries processed per invocation (keeps wall time and subrequests sane) */
@@ -128,8 +130,10 @@ export function ownSiteSlug(
   } catch {
     return null;
   }
+  // Normalise both bases first: a PUBLIC_BASE_URL without a scheme used to
+  // make every own-site link look external (and un-scrapable).
   const hosts = new Set<string>();
-  for (const candidate of [env.PUBLIC_BASE_URL, requestOrigin]) {
+  for (const candidate of [publicBaseUrl(env, requestOrigin), requestOrigin]) {
     if (!candidate) continue;
     try {
       hosts.add(new URL(candidate).host.toLowerCase());
@@ -168,7 +172,7 @@ async function loadOwnProfile(
     .filter(Boolean);
 
   return {
-    sourceUrl: `${env.PUBLIC_BASE_URL || "https://site"}/dreamgirl/${slug}`,
+    sourceUrl: profileLink(env, "", slug),
     title: (persona.name as string) || slug,
     description: (persona.description as string) || undefined,
     images: images.slice(0, MAX_IMAGES),
@@ -298,6 +302,59 @@ export interface BulkRunOptions {
   videoLimit?: number;
 }
 
+const DIRECT_VIDEO_RE = /\.(?:mp4|webm|mov|m4v|m3u8)(?:\?|#|$)/i;
+
+/**
+ * Name a profile from a direct file URL, e.g. `/models/ava-01.jpg` → "Ava".
+ * Used when an entry points straight at a JPEG instead of a page.
+ */
+function nameFromFileUrl(url: string): string {
+  try {
+    const last = decodeURIComponent(
+      new URL(url).pathname.split("/").filter(Boolean).pop() || ""
+    );
+    const cleaned = last
+      .replace(/\.[a-z0-9]{2,5}$/i, "")
+      .replace(/[-_+]+/g, " ")
+      .replace(/\b\d{2,}\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (cleaned.length >= 2) {
+      return cleaned
+        .split(" ")
+        .slice(0, 3)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    }
+  } catch {
+    // fall through
+  }
+  return "New Profile";
+}
+
+/**
+ * A direct `.jpg` is already the image — no page to scrape. Same for a direct
+ * video file. This is the "I have the image URL and the video URL separately"
+ * case, where neither link is an HTML page.
+ */
+function directSourceProfile(
+  url: string,
+  kind: "image" | "video"
+): ScrapedProfile {
+  return {
+    sourceUrl: url,
+    title: kind === "image" ? nameFromFileUrl(url) : undefined,
+    images: kind === "image" ? [url] : [],
+    videos: kind === "video" ? [url] : [],
+    pagesScanned: 0,
+    sourceUrls: [url],
+    imageCandidates: kind === "image" ? 1 : 0,
+    imagesRejected: 0,
+    detailPagesScanned: 0,
+    imageChecks: 0,
+  };
+}
+
 async function scrapeSource(
   env: Env,
   requestOrigin: string,
@@ -305,6 +362,14 @@ async function scrapeSource(
   mode: { images: boolean; videos: boolean },
   options: BulkRunOptions
 ): Promise<{ scraped: ScrapedProfile; subrequests: number }> {
+  // Direct media links need no fetch at all.
+  if (mode.images && isPhotoUrl(url)) {
+    return { scraped: directSourceProfile(url, "image"), subrequests: 0 };
+  }
+  if (mode.videos && DIRECT_VIDEO_RE.test(url)) {
+    return { scraped: directSourceProfile(url, "video"), subrequests: 0 };
+  }
+
   const ownSlug = ownSiteSlug(url, env, requestOrigin);
   if (ownSlug) {
     const own = await loadOwnProfile(env, ownSlug);
@@ -318,7 +383,7 @@ async function scrapeSource(
     maxPages: options.maxPages ?? 2,
     detailPages: options.detailPages ?? 2,
     videoLimit: options.videoLimit ?? 50,
-    maxImageChecks: 6,
+    maxImageChecks: 10,
   });
   const subrequests =
     1 +
@@ -329,16 +394,19 @@ async function scrapeSource(
 }
 
 /**
- * Scrape one entry, create the persona with its images and attach its videos.
- * Every failure mode is reported in the result instead of throwing, so one bad
- * URL never stops a batch.
+ * Scrape one entry and generate its profile text — **no database writes**.
+ * This is the preview stage: /confirm commits it later.
+ *
+ * Throws with a human-readable message when the entry cannot be used; the
+ * caller reports that line and keeps going.
  */
-export async function runBulkEntry(
+export async function prepareBulkEntry(
   env: Env,
   requestOrigin: string,
   entry: BulkEntry,
+  id: number,
   options: BulkRunOptions = {}
-): Promise<BulkResult> {
+): Promise<PreparedBulkEntry> {
   let spent = 0;
   const sameSource = entry.imageSource === entry.videoSource;
 
@@ -348,6 +416,7 @@ export async function runBulkEntry(
   let description: string | undefined;
   let textSnippet: string | undefined;
   let imageCandidates = 0;
+  let imagesRejected = 0;
 
   try {
     const imageRun = await scrapeSource(
@@ -364,6 +433,7 @@ export async function runBulkEntry(
     description = imageRun.scraped.description;
     textSnippet = imageRun.scraped.textSnippet;
     imageCandidates = imageRun.scraped.imageCandidates || images.length;
+    imagesRejected = imageRun.scraped.imagesRejected || 0;
 
     if (!sameSource) {
       const videoRun = await scrapeSource(
@@ -380,23 +450,17 @@ export async function runBulkEntry(
       textSnippet = textSnippet || videoRun.scraped.textSnippet;
     }
   } catch (err) {
-    return {
-      raw: entry.raw,
-      ok: false,
-      error: (err as Error).message,
-      subrequests: spent + 1,
-    };
+    throw new Error((err as Error).message);
   }
 
   if (images.length === 0) {
-    return {
-      raw: entry.raw,
-      ok: false,
-      error: imageCandidates > 0
-        ? `${imageCandidates} image URL(s) found but none were served as JPEG`
-        : "no JPEG images found",
-      subrequests: spent,
-    };
+    throw new Error(
+      imagesRejected > 0
+        ? `${imagesRejected} image URL(s) found but none are JPEG (WebP/PNG/GIF are rejected) — pick a page that serves .jpg photos`
+        : imageCandidates > 0
+          ? `${imageCandidates} image URL(s) found but none were served as image/jpeg`
+          : "no JPEG images found"
+    );
   }
 
   const scraped: ScrapedProfile = {
@@ -428,8 +492,47 @@ export async function runBulkEntry(
   );
   spent += prepared.attempts;
 
-  const slug = await uniqueSlug(env, generated.slug || generated.name);
-  const payload = buildPersonaPayload(generated, slug, {
+  const slug = generated.slug || generated.name;
+  return {
+    id,
+    raw: entry.raw,
+    imageSource: entry.imageSource,
+    videoSource: entry.videoSource,
+    slug,
+    name: generated.name,
+    draft: generated,
+    images: images.slice(0, MAX_IMAGES),
+    videos: prepared.urls,
+    skippedVideos: prepared.unresolved,
+    usedFallbackText,
+    subrequests: spent,
+  };
+}
+
+/**
+ * Write a prepared entry into the database: create the persona with its
+ * images and attach the videos that were already resolved during preview.
+ */
+export async function commitBulkEntry(
+  env: Env,
+  requestOrigin: string,
+  prepared: PreparedBulkEntry
+): Promise<BulkResult> {
+  let slug: string;
+  try {
+    // Re-checked here because preview does not reserve slugs.
+    slug = await uniqueSlug(env, prepared.slug || prepared.name);
+  } catch (err) {
+    return {
+      raw: prepared.raw,
+      ok: false,
+      error: (err as Error).message,
+      subrequests: 1,
+    };
+  }
+
+  const images = prepared.images;
+  const payload = buildPersonaPayload(prepared.draft, slug, {
     profileImage: images[0] ?? null,
     coverImage: images[1] ?? null,
     gallery: images.slice(2, 2 + MAX_GALLERY),
@@ -440,15 +543,15 @@ export async function runBulkEntry(
     persona = await createPersona(env, payload);
   } catch (err) {
     return {
-      raw: entry.raw,
+      raw: prepared.raw,
       ok: false,
       error: (err as Error).message,
-      subrequests: spent,
+      subrequests: 2,
     };
   }
 
   let attached = 0;
-  for (const url of prepared.urls) {
+  for (const url of prepared.videos) {
     if (
       await addVideo(env, persona.id, {
         url,
@@ -459,17 +562,45 @@ export async function runBulkEntry(
     }
   }
 
-  const siteBase = (env.PUBLIC_BASE_URL || requestOrigin).replace(/\/+$/, "");
   return {
-    raw: entry.raw,
+    raw: prepared.raw,
     ok: true,
-    name: generated.name,
+    name: prepared.draft.name,
     slug,
-    link: `${siteBase}/dreamgirl/${slug}`,
+    link: profileLink(env, requestOrigin, slug),
     images: Math.min(images.length, MAX_IMAGES),
     videos: attached,
-    skippedVideos: prepared.unresolved,
-    usedFallbackText,
-    subrequests: spent,
+    skippedVideos: prepared.skippedVideos,
+    usedFallbackText: prepared.usedFallbackText,
+    subrequests: 2 + prepared.videos.length,
   };
+}
+
+/**
+ * Prepare + commit in one step. Kept for one-shot callers; the bot now uses
+ * prepareBulkEntry + commitBulkEntry so the user can preview first.
+ */
+export async function runBulkEntry(
+  env: Env,
+  requestOrigin: string,
+  entry: BulkEntry,
+  options: BulkRunOptions = {}
+): Promise<BulkResult> {
+  try {
+    const prepared = await prepareBulkEntry(
+      env,
+      requestOrigin,
+      entry,
+      1,
+      options
+    );
+    return await commitBulkEntry(env, requestOrigin, prepared);
+  } catch (err) {
+    return {
+      raw: entry.raw,
+      ok: false,
+      error: (err as Error).message,
+      subrequests: 1,
+    };
+  }
 }

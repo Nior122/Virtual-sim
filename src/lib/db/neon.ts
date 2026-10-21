@@ -393,3 +393,38 @@ export async function getPublicPersonaBySlug(
 
   return persona;
 }
+
+// ---------------------------------------------------------------------------
+// Chat / call screen persona (server-side only)
+// ---------------------------------------------------------------------------
+/**
+ * Fields the chat prompt builder needs. Includes `systemPrompt`, which must
+ * never be sent to a browser — this helper is only called from Functions.
+ */
+const CHAT_COLUMNS = [
+  ...PUBLIC_PERSONA_COLUMNS.filter(
+    (c) => !["createdAt", "updatedAt", "active", "isAdult"].includes(c)
+  ),
+  "systemPrompt",
+] as const;
+
+/**
+ * Resolves a persona for /api/chat by id *or* slug. Previously the chat route
+ * never looked the persona up, so every profile answered with the same generic
+ * "Dream Babe" prompt instead of its own name, personality and speaking style.
+ */
+export async function getPersonaForChat(
+  env: Env,
+  idOrSlug: string
+): Promise<Record<string, unknown> | null> {
+  if (!idOrSlug) return null;
+  const sql = sqlFor(env);
+  const columns = CHAT_COLUMNS.map((c) => `"${c}"`).join(", ");
+  const rows = await sql.query(
+    `SELECT ${columns} FROM "Persona"
+     WHERE ("id" = $1 OR lower("slug") = lower($1)) AND "active" = true
+     LIMIT 1`,
+    [idOrSlug]
+  );
+  return (rows[0] as Record<string, unknown>) || null;
+}

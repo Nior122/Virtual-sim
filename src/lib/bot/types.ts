@@ -143,6 +143,29 @@ export interface BulkEntry {
   videoSource: string;
 }
 
+/**
+ * A bulk entry after scraping and AI generation, but **before** anything is
+ * written to the database. This is what the preview shows and what /confirm
+ * turns into a real profile.
+ */
+export interface PreparedBulkEntry {
+  /** Stable id inside the review set (1-based, renumbered on skip). */
+  id: number;
+  raw: string;
+  imageSource: string;
+  videoSource: string;
+  /** Candidate slug; re-checked for uniqueness at commit time. */
+  slug: string;
+  name: string;
+  draft: PersonaDraft;
+  images: string[];
+  /** Already resolved to playable URLs. */
+  videos: string[];
+  skippedVideos: number;
+  usedFallbackText: boolean;
+  subrequests: number;
+}
+
 export interface PersonaDraft {
   name: string;
   slug: string;
