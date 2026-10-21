@@ -1,9 +1,9 @@
 import type { Env, PersonaDraft, ScrapedProfile } from "./types";
-
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile";
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct";
+import {
+  resolveProviders,
+  type EnvLike,
+  type SkippedProvider,
+} from "../ai/openai-compatible";
 
 const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use null when information is unknown):
 - name: string, display name of the persona
@@ -17,7 +17,7 @@ const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use 
 - shortBio: string or null, one playful line
 - longBio: string or null, 2-4 sentences written in the persona's own voice
 - personality: string, comma-separated core traits
-- background: string, 1-3 sentence fictional backstory
+- background: string, 1-3 sentence backstory written as if she were a real person
 - interests: string, comma-separated list
 - hobbies: string or null, comma-separated list
 - likes: string or null, comma-separated list
@@ -28,7 +28,7 @@ const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use 
 - emojiFrequency: one of "Low", "Medium", "High" or null
 - bodyType, height, eyeColor, hairColor: string or null, physical descriptors
 - turnOns, turnOffs, fantasies, intimacyStyle, preferredVibe, kinksAndFetishes, eroticInterests: string or null, keep these flirty and tasteful, never explicit
-- systemPrompt: string, a short instruction block (under 60 words) telling the chat model how to stay in character, keep replies short and human`;
+- systemPrompt: string, a short instruction block (under 60 words) telling the chat model how to stay in character, keep replies short and human. Write it in the second person ("You are …"), describe only her personality and texting habits, and NEVER use the words AI, bot, chatbot, model, fictional, character, roleplay or pretend — the persona must present as a real person`;
 
 function buildUserPrompt(writeUp: string, scraped?: ScrapedProfile | null): string {
   const parts: string[] = [];
@@ -112,30 +112,26 @@ class ProviderError extends Error {
   }
 }
 
-/** Configured providers, in attempt order. */
-function getProviders(env: Env): Provider[] {
-  const providers: Provider[] = [];
-  if (env.GROQ_API_KEY) {
-    providers.push({
-      name: "Groq",
-      url: GROQ_URL,
-      apiKey: env.GROQ_API_KEY,
-      model: env.GROQ_MODEL || GROQ_DEFAULT_MODEL,
-    });
-  }
-  if (env.OPENROUTER_API_KEY) {
-    providers.push({
-      name: "OpenRouter",
-      url: OPENROUTER_URL,
-      apiKey: env.OPENROUTER_API_KEY,
-      model: env.OPENROUTER_MODEL || OPENROUTER_DEFAULT_MODEL,
-      extraHeaders: {
-        "HTTP-Referer": "https://dreambabe.pages.dev",
-        "X-Title": "Dream Babe Profile Bot",
-      },
-    });
-  }
-  return providers;
+/**
+ * Configured providers, in attempt order — endpoint, key and model all come
+ * from the environment (see src/lib/ai/openai-compatible.ts). No model ID is
+ * hardcoded; a provider whose model variable is unset is skipped and reported.
+ */
+function getProviders(env: Env): {
+  providers: Provider[];
+  skipped: SkippedProvider[];
+} {
+  const resolved = resolveProviders(env as EnvLike);
+  return {
+    providers: resolved.providers.map((provider) => ({
+      name: provider.label,
+      url: `${provider.baseUrl}/chat/completions`,
+      apiKey: provider.apiKey,
+      model: provider.model,
+      extraHeaders: provider.extraHeaders,
+    })),
+    skipped: resolved.skipped,
+  };
 }
 
 /** POST one chat completion. Attaches the HTTP status to thrown errors. */
@@ -238,10 +234,13 @@ export async function generatePersonaDraft(
     );
   }
 
-  const providers = getProviders(env);
+  const { providers, skipped } = getProviders(env);
   if (providers.length === 0) {
     throw new Error(
-      "No AI provider configured. Set GROQ_API_KEY or OPENROUTER_API_KEY in the Pages environment variables."
+      "No AI provider configured for profile writing. " +
+        skipped.map((entry) => `${entry.label}: ${entry.reason}`).join("; ") +
+        ". Set the API key and the model variable (e.g. GROQ_API_KEY + GROQ_MODEL) " +
+        "in the Pages environment variables."
     );
   }
 

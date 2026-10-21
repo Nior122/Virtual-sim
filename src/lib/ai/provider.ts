@@ -1,5 +1,12 @@
 import { Persona, ChatMessage } from "../../types";
 import { buildPersonaContext } from "./persona-context";
+import {
+  describeProvider,
+  providerStatus,
+  requestChatCompletion,
+  resolveProviders,
+  type EnvLike,
+} from "./openai-compatible";
 
 interface GenerateParams {
   persona: Persona;
@@ -7,66 +14,26 @@ interface GenerateParams {
   envOverride?: Record<string, any>;
 }
 
-function getEnvValue(envOverride: Record<string, any> | undefined, key: string): string | undefined {
-  if (envOverride && envOverride[key]) return envOverride[key];
-  if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
-  return undefined;
-}
+/** Re-exported so the bot can explain what is (not) configured. */
+export { providerStatus, resolveProviders };
 
-export async function callOpenAICompatible(
-  url: string,
-  apiKey: string,
-  model: string,
-  messages: any[],
-  maxTokens: number = 80,
-  timeoutMs: number = 9000,
-  extraHeaders: Record<string, string> = {}
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...extraHeaders,
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.85,
-        max_tokens: maxTokens,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(`Provider API Error (${response.status}): ${errorText.slice(0, 120)}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content || typeof content !== "string" || content.trim().length === 0) {
-      throw new Error("Empty response from AI provider");
-    }
-
-    return content.trim();
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+/** Name reported when no AI provider answered. */
+export const OFFLINE_ENGINE = "Dreamgirl Engine";
 
 /**
- * Generates natural fallback responses tailored to the persona when API keys are not provided
+ * Offline answer used only when every AI provider is unavailable.
+ *
+ * It used to return one of five random greetings no matter what was asked —
+ * which reads as "I asked a question and she answered something else". This
+ * version answers the actual question from the persona's own fields and falls
+ * back to a reply that at least references what the user said.
  */
 function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): string {
-  const text = (lastUserMessage || "").toLowerCase();
+  const text = (lastUserMessage || "").toLowerCase().trim();
+  const name = persona.name || "me";
+  const location = [persona.city, persona.country].filter(Boolean).join(", ");
 
-  // Socials / Manager / Dates
+  // Socials / Manager / Dates (kept exactly as before)
   if (
     /social|instagram|ig|snap|snapchat|telegram|whatsapp|phone|number|digits|date|meet|meetup|dinner|drinks/i.test(
       text
@@ -75,20 +42,75 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
     return `Mmm you'll have to reach out to my manager on Telegram for that: t.me/Dreamgirlteam 😉✨`;
   }
 
-  // Are you a bot / Prove it / Call
+  // Are you a bot / Prove it / Call (kept exactly as before)
   if (/bot|real|fake|ai|robot|prove/i.test(text)) {
     return `Haha excuse me?! 😂 I'm 100% real babe. Let me call you right now! 📞`;
   }
 
-  // Flirty / General greetings
-  const greetings = [
-    `Hey there! I was just thinking about you... what are you up to? 😉`,
-    `Haha you're cute! Tell me something fun about your day ✨`,
-    `Just relaxing at home... so glad you messaged me 💕`,
-    `Mmm you always know how to make me smile 😏`,
-    `Hey babe! How is your day going so far? 🌸`,
-  ];
-  return greetings[Math.floor(Math.random() * greetings.length)];
+  // Direct questions about the persona are answerable from the record.
+  if (/\b(your|ur)\s+(name|full name)\b|\bwhat('| i)?s your name\b|\bwho are you\b/.test(text)) {
+    return `It's ${name} 😊 What should I call you?`;
+  }
+  if (/\bhow old\b|\byour age\b|\bage\b.*\?/.test(text) && persona.age) {
+    return `I'm ${persona.age} 😉 Does that matter to you?`;
+  }
+  if (/\bwhere (are you|do you live|r u)\b|\bwhere'?s? (home|from)\b|\byour city\b/.test(text)) {
+    return location
+      ? `I'm in ${location} 🌸 Where are you texting me from?`
+      : `Somewhere warm and quiet right now 😏 Where are you?`;
+  }
+  if (/\bwhat do you do\b|\byour job\b|\bwork\b|\boccupation\b/.test(text)) {
+    return persona.occupation
+      ? `I'm a ${persona.occupation.toLowerCase()} — keeps me busy 😌 What about you?`
+      : `A bit of everything, honestly 😅 What do you do?`;
+  }
+  if (/\bhow are you\b|\bhow('| i)?s your day\b|\bhow you doing\b|\bwyd\b|\bwhat are you doing\b/.test(text)) {
+    return `Just chilling and thinking about you 😏 What are you up to?`;
+  }
+  if (/\b(hi|hey|hello|yo|sup)\b/.test(text)) {
+    return `Hey you 😊 I was hoping you'd message. How's your day going?`;
+  }
+  if (/\bthank(s| you)\b/.test(text)) {
+    return `Anytime babe 😘 Tell me something about your day.`;
+  }
+  if (/\b(bye|goodnight|good night|talk later|gtg)\b/.test(text)) {
+    return `Don't stay away too long 😉 Goodnight.`;
+  }
+
+  // Nothing matched: still respond to what they said instead of a random line.
+  const topic = lastUserMessage.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (lastUserMessage.includes("?")) {
+    return `Mmm good question 😏 ${topic.replace(/\?+$/, "")} — tell me what you think first.`;
+  }
+  return `Mmm I like that 😊 Tell me more about "${topic}".`;
+}
+
+/**
+ * Clean chat history for the model: blank attachment turns are dropped
+ * (the model used to answer the previous message instead), same-role turns
+ * merged, and the conversation always ends on the user's real message.
+ */
+export function prepareHistory(
+  messages: Pick<ChatMessage, "role" | "content">[],
+  limit = 12
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const cleaned: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const message of messages) {
+    const content = String(message.content || "").trim();
+    if (!content) continue;
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const previous = cleaned[cleaned.length - 1];
+    if (previous && previous.role === role) {
+      previous.content = `${previous.content}\n${content}`.slice(-2000);
+      continue;
+    }
+    cleaned.push({ role, content });
+  }
+  // Always end on the user's turn — that is the message being answered.
+  while (cleaned.length > 1 && cleaned[cleaned.length - 1].role !== "user") {
+    cleaned.pop();
+  }
+  return cleaned.length > limit ? cleaned.slice(-limit) : cleaned;
 }
 
 export async function generatePersonaResponse({
@@ -98,86 +120,50 @@ export async function generatePersonaResponse({
 }: GenerateParams): Promise<{ content: string; provider: string }> {
   const systemPrompt = buildPersonaContext(persona);
 
-  // Truncate history to last 10 messages to maintain a tight, fast context
-  const recentMessages = messages.length > 10 ? messages.slice(-10) : messages;
+  const recentMessages = prepareHistory(messages);
 
   const formattedMessages = [
     { role: "system", content: systemPrompt },
-    ...recentMessages.map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    })),
+    ...recentMessages,
   ];
 
-  const lastUserMsg = messages[messages.length - 1]?.content || "";
+  const lastUserMsg =
+    [...recentMessages].reverse().find((m) => m.role === "user")?.content || "";
 
-  // 1. PRIMARY: Groq (ultra-fast OpenAI-compatible API)
-  const groqApiKey = getEnvValue(envOverride, 'GROQ_API_KEY');
-  if (groqApiKey) {
+  // Providers come from the environment: endpoint + API key + model. No model
+  // ID is hardcoded, so a retired model is a config error instead of silent
+  // fallback behaviour, and any OpenAI-compatible gateway can be used.
+  const { providers, skipped } = resolveProviders(envOverride as EnvLike);
+
+  if (providers.length === 0) {
+    console.warn(
+      `No AI provider configured for chat — ${skipped
+        .map((entry) => `${entry.label}: ${entry.reason}`)
+        .join("; ")}`
+    );
+  }
+
+  for (const provider of providers) {
     try {
-      const model = getEnvValue(envOverride, 'GROQ_MODEL') || "llama-3.3-70b-versatile";
-      const content = await callOpenAICompatible(
-        "https://api.groq.com/openai/v1/chat/completions",
-        groqApiKey,
-        model,
-        formattedMessages,
-        80,
-        9000
-      );
-      return { content: sanitizeOutput(content), provider: `Groq (${model})` };
+      const content = await requestChatCompletion(provider, {
+        messages: formattedMessages,
+        temperature: 0.85,
+        max_tokens: 160,
+      });
+      return { content: sanitizeOutput(content), provider: describeProvider(provider) };
     } catch (err: any) {
-      console.warn("Groq request failed, switching to fallback provider:", err?.message || err);
+      console.warn(
+        `${provider.label} request failed, trying the next provider:`,
+        err?.message || err
+      );
     }
   }
 
-  // 2. FALLBACK: OpenRouter (OpenRouter API)
-  const openRouterApiKey = getEnvValue(envOverride, 'OPENROUTER_API_KEY');
-  if (openRouterApiKey) {
-    try {
-      const model = getEnvValue(envOverride, 'OPENROUTER_MODEL') || "meta-llama/llama-3.3-70b-instruct";
-      const content = await callOpenAICompatible(
-        "https://openrouter.ai/api/v1/chat/completions",
-        openRouterApiKey,
-        model,
-        formattedMessages,
-        80,
-        9000,
-        {
-          "HTTP-Referer": "https://dreamgirl.app",
-          "X-Title": "Dreamgirl AI",
-        }
-      );
-      return { content: sanitizeOutput(content), provider: `OpenRouter (${model})` };
-    } catch (err: any) {
-      console.warn("OpenRouter fallback request failed:", err?.message || err);
-    }
-  }
-
-  // 3. OPTIONAL SECONDARY FALLBACK: Standard OpenAI API or OpenAI Proxy
-  const openAiApiKey = getEnvValue(envOverride, 'OPENAI_API_KEY');
-  if (openAiApiKey) {
-    try {
-      const baseUrl = (getEnvValue(envOverride, 'OPENAI_BASE_URL') || "https://api.openai.com/v1").replace(/\/+$/, "");
-      const model = getEnvValue(envOverride, 'OPENAI_MODEL') || "gpt-4o-mini";
-      const content = await callOpenAICompatible(
-        `${baseUrl}/chat/completions`,
-        openAiApiKey,
-        model,
-        formattedMessages,
-        80,
-        9000
-      );
-      return { content: sanitizeOutput(content), provider: `OpenAI (${model})` };
-    } catch (err: any) {
-      console.warn("OpenAI fallback request failed:", err?.message || err);
-    }
-  }
-
-  // 4. FINAL SAFEGUARD: Native Persona Response Engine (Zero-Downtime Guarantee)
-  console.info("Using persona dynamic fallback (no active API key or all network calls timed out)");
+  // Last resort: answer from the persona record (canned but on-topic).
+  console.info("Using persona dynamic fallback (no active provider or all calls failed)");
   return {
     content: getLocalFallbackResponse(persona, lastUserMsg),
-    provider: "Dreamgirl Engine",
+    provider: OFFLINE_ENGINE,
   };
 }
 

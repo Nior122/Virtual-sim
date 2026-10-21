@@ -303,6 +303,8 @@ export interface ImageGroups {
   secondary: string[];
   /** Image URLs seen but impossible to use (WebP, PNG, GIF, …). */
   nonJpeg: number;
+  /** Those same URLs, so a JPEG variant can be tried (`x.webp` → `x.jpg`). */
+  nonJpegUrls: string[];
 }
 
 /** Flat, ordered list of every image candidate on a page. */
@@ -323,14 +325,16 @@ export function collectImageCandidates(html: string, pageUrl: string): string[] 
 export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
   const primary: string[] = [];
   const secondary: string[] = [];
+  const nonJpegUrls: string[] = [];
   let nonJpeg = 0;
   const makePush = (target: string[]) => (raw: string | null) => {
     if (!raw || target.length >= 40) return;
     const abs = absoluteUrl(raw, pageUrl);
     if (!abs) return;
     if (!isImageCandidate(abs)) {
-      // Count images the site offers in a format we cannot store, so an empty
-      // scrape can say "3 image(s) found but they are WebP/PNG".
+      // Images the site offers in a format we cannot store. They are counted
+      // so an empty scrape can say "3 image(s) found but they are WebP/PNG",
+      // and remembered so a JPEG variant of the same path can be tried.
       if (
         NON_JPEG_IMAGE_RE.test(abs) &&
         !SVG_RE.test(abs) &&
@@ -338,6 +342,9 @@ export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
         !abs.startsWith("data:")
       ) {
         nonJpeg += 1;
+        if (nonJpegUrls.length < 12 && !nonJpegUrls.includes(abs)) {
+          nonJpegUrls.push(abs);
+        }
       }
       return;
     }
@@ -412,7 +419,16 @@ export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
     pushPrimary(scripted);
   }
 
-  return { primary, secondary, nonJpeg };
+  // Last-resort sweep: every JPEG URL anywhere in the document, whatever
+  // attribute, JSON blob or inline style it hides in. Catches galleries that
+  // use attributes we do not know about.
+  const rawJpegRe =
+    /(?:https?:)?\/\/[^\s"'<>()\\]+?\.jpe?g(?:\?[^\s"'<>()\\]*)?/gi;
+  while ((tag = rawJpegRe.exec(html)) !== null && secondary.length < 40) {
+    push(tag[0]);
+  }
+
+  return { primary, secondary, nonJpeg, nonJpegUrls };
 }
 
 /** Content types that can never be a JPEG — no body read needed. */
@@ -530,11 +546,61 @@ export async function isJpegResponse(
  * extensions) needs a JPEG content-type probe, bounded for the Workers
  * subrequest budget.
  */
+/**
+ * Candidate JPEG URLs for an image the site only advertises as WebP/PNG.
+ *
+ * Many CDNs (leakgallery, imagekit, cloudinary, …) keep the original photo as
+ * JPEG and merely *serve* a webp thumbnail, so `x.webp` → `x.jpg` and the
+ * `?fm=jpg` / `?format=jpg` transform variants often return a real JPEG.
+ * Every variant is still verified, so a site that truly has no JPEG never
+ * gets a broken image stored.
+ */
+export function jpegVariants(url: string): string[] {
+  const variants: string[] = [];
+  const stripped = url.replace(/[?#].*$/, "");
+  const withoutExt = stripped.replace(/\.(?:webp|png|gif|avif|jpe?g)$/i, "");
+  const withQuery = url.match(/[?#].*$/)?.[0] || "";
+
+  if (withoutExt !== stripped) {
+    variants.push(`${withoutExt}.jpg`);
+    if (withQuery) variants.push(`${withoutExt}.jpg${withQuery}`);
+  }
+  const join = url.includes("?") ? "&" : "?";
+  variants.push(`${url}${join}fm=jpg`);
+  variants.push(`${url}${join}format=jpg`);
+  return [...new Set(variants)].filter((variant) => variant !== url);
+}
+
+/** Recover JPEG photos from WebP/PNG-only candidates, within a probe budget. */
+async function recoverJpegVariants(
+  sources: string[],
+  limit: number,
+  referer: string,
+  budget: number
+): Promise<{ images: string[]; checked: number }> {
+  const images: string[] = [];
+  let checked = 0;
+  for (const source of sources) {
+    if (images.length >= limit || checked >= budget) break;
+    for (const variant of jpegVariants(source)) {
+      if (images.length >= limit || checked >= budget) break;
+      checked += 1;
+      if (await isJpegResponse(variant, referer)) {
+        images.push(variant);
+        break;
+      }
+    }
+  }
+  return { images, checked };
+}
+
 export async function resolveImageCandidates(
   candidates: string[],
   limit: number,
   referer: string,
-  maxChecks = MAX_IMAGE_CHECKS
+  maxChecks = MAX_IMAGE_CHECKS,
+  /** WebP/PNG URLs to retry as JPEG variants once the normal list runs dry */
+  nonJpegSources: string[] = []
 ): Promise<{ images: string[]; checked: number; rejected: number }> {
   const images: string[] = [];
   let checked = 0;
@@ -551,6 +617,25 @@ export async function resolveImageCandidates(
     if (await isJpegResponse(url, referer)) images.push(url);
     else rejected += 1;
   }
+
+  // Still short? Try to turn the rejected WebP/PNG images into JPEGs.
+  if (images.length < limit && nonJpegSources.length > 0) {
+    const spare = checkBudget - checked;
+    if (spare > 0) {
+      const recovered = await recoverJpegVariants(
+        nonJpegSources,
+        limit - images.length,
+        referer,
+        Math.min(spare, 6)
+      );
+      checked += recovered.checked;
+      for (const image of recovered.images) {
+        if (!images.includes(image)) images.push(image);
+      }
+      rejected = Math.max(0, rejected + nonJpegSources.length - recovered.images.length);
+    }
+  }
+
   return { images, checked, rejected };
 }
 
@@ -795,6 +880,100 @@ async function fetchHtml(url: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+export interface PageDiagnostics {
+  url: string;
+  status: number;
+  contentType: string;
+  bytes: number;
+  title: string | null;
+  imgTags: number;
+  sourceTags: number;
+  challenge: boolean;
+  primary: string[];
+  secondary: string[];
+  nonJpegUrls: string[];
+  probes: Array<{ url: string; ok: boolean }>;
+  error?: string;
+}
+
+/**
+ * Explain what the scraper sees on a page: status, content type, how many
+ * `<img>` tags exist, which image URLs it found and whether each one is
+ * actually served as JPEG. Used by the bot's /diag command when a scrape
+ * comes back empty, so the reason is visible instead of guessed.
+ */
+export async function inspectPage(
+  url: string,
+  maxProbes = 6
+): Promise<PageDiagnostics> {
+  const result: PageDiagnostics = {
+    url,
+    status: 0,
+    contentType: "",
+    bytes: 0,
+    title: null,
+    imgTags: 0,
+    sourceTags: 0,
+    challenge: false,
+    primary: [],
+    secondary: [],
+    nonJpegUrls: [],
+    probes: [],
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let html = "";
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    result.status = res.status;
+    result.contentType = res.headers.get("content-type") || "";
+    html = await res.text();
+    result.bytes = html.length;
+  } catch (err) {
+    result.error = (err as Error).message;
+    return result;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  result.title = readMeta(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
+  result.challenge =
+    /just a moment|cf-challenge|challenge-platform|checking your browser|enable javascript and cookies/i.test(
+      html
+    );
+  result.imgTags = (html.match(/<img\b/gi) || []).length;
+  result.sourceTags = (html.match(/<source\b/gi) || []).length;
+
+  const groups = collectImageGroups(html, url);
+  result.primary = groups.primary.slice(0, 8);
+  result.secondary = groups.secondary.slice(0, 8);
+  result.nonJpegUrls = groups.nonJpegUrls.slice(0, 8);
+
+  const toProbe = [...groups.primary, ...groups.secondary]
+    .filter((candidate) => !isPhotoUrl(candidate))
+    .slice(0, Math.max(0, Math.min(maxProbes, 8)));
+  for (const candidate of toProbe) {
+    result.probes.push({
+      url: candidate,
+      ok: await isJpegResponse(candidate, url),
+    });
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Profile scraper
 // ---------------------------------------------------------------------------
 /**
@@ -859,6 +1038,7 @@ export async function scrapeProfile(
   let detailPagesScanned = 0;
   let detailLinksTried = new Set<string>();
   let nonJpegImages = 0;
+  const nonJpegSources: string[] = [];
   let title: string | null = null;
   let description: string | null = null;
   let textSnippet = "";
@@ -902,6 +1082,11 @@ export async function scrapeProfile(
     if (wantImages) {
       const pageImages = collectImageGroups(html, pageUrl);
       nonJpegImages += pageImages.nonJpeg;
+      for (const url of pageImages.nonJpegUrls) {
+        if (nonJpegSources.length < 12 && !nonJpegSources.includes(url)) {
+          nonJpegSources.push(url);
+        }
+      }
       for (const candidate of pageImages.primary) {
         uniquePush(primaryCandidates, candidate, 40);
       }
@@ -973,6 +1158,11 @@ export async function scrapeProfile(
         if (wantMoreImages) {
           const detailImages = collectImageGroups(detailHtml, link);
           nonJpegImages += detailImages.nonJpeg;
+          for (const url of detailImages.nonJpegUrls) {
+            if (nonJpegSources.length < 12 && !nonJpegSources.includes(url)) {
+              nonJpegSources.push(url);
+            }
+          }
           for (const candidate of detailImages.primary) {
             uniquePush(detailCandidates, candidate, 40);
           }
@@ -1032,7 +1222,8 @@ export async function scrapeProfile(
     orderedCandidates,
     imageLimit,
     startUrl,
-    options.maxImageChecks
+    options.maxImageChecks,
+    nonJpegSources
   );
 
   if (!title && !description && images.length === 0 && videos.length === 0) {
