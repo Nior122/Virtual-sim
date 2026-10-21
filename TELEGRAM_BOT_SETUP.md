@@ -126,6 +126,46 @@ You can use OpenRouter *instead* of Groq by leaving `GROQ_API_KEY` empty.
 
 > From now on every push to `main` redeploys automatically.
 
+**If you only ever see "Preview" deployments**, the project's *Production
+branch* is not `main` — that is a dashboard setting, not a code problem, and a
+merge will build a preview instead of the live site. Fix it in
+**Settings → Builds & deployments → Production branch → `main`**, then retry
+the deployment. Part 6b makes this automatic.
+
+---
+
+## Part 6b — Deploy from GitHub Actions (optional, makes production reliable)
+
+The repository ships `.github/workflows/deploy-pages.yml`. On every push to
+`main` it type-checks, builds and uploads `dist/` **plus the `functions/`
+directory** straight to your Pages project, and it pins the project's
+production branch to `main` first. It removes the dashboard setting as a
+failure mode: a merge can no longer silently build a *preview* while the live
+site keeps running old code.
+
+1. Create a Cloudflare API token: **My Profile → API Tokens → Create Token →
+   Custom token**, permission **Account → Cloudflare Pages → Edit**.
+2. Add repository secrets (**Settings → Secrets and variables → Actions**):
+
+   | Secret | Value |
+   |---|---|
+   | `CLOUDFLARE_API_TOKEN` | the token from step 1 |
+   | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard → account ID (right sidebar, or any zone's overview) |
+
+3. Optional: add a repository **variable** `CLOUDFLARE_PROJECT_NAME` if your
+   Pages project is not called `dreambabe`.
+4. Merge anything to `main` (or run the workflow manually from the **Actions**
+   tab) and check the run. The deployment should appear in Pages with a
+   **Production** badge.
+
+Until both secrets exist the workflow logs a warning naming the missing one and
+skips the deploy (the run stays green), so the dashboard integration keeps
+working and `main` is not left with a red check. Secrets and the KV binding on
+the Pages project are untouched by this workflow.
+
+> You can keep or remove the dashboard Git integration; if both are connected,
+> the last deploy of the same commit wins — the content is identical.
+
 ---
 
 ## Part 7 — Create the KV namespace and bind it (5 minutes)
@@ -318,6 +358,10 @@ In your Telegram bot chat:
 | `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |
 | `/scrape` misses an infinite-scroll gallery | A Worker can't scroll or run the page's JavaScript. Copy the individual page links and `/scrape` them one by one. |
 | Variable changes seem ignored | Variables load only on a fresh deploy: **Deployments → ⋯ → Retry deployment**. |
+| Only **Preview** deployments appear after a merge | The Pages project's *Production branch* is not `main`. Settings → Builds & deployments → Production branch → `main`, then retry the deployment. Part 6b automates this. |
+| Deploy workflow says "Skipping the Pages deploy — missing secret(s)" | Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` under Settings → Secrets and variables → Actions (Part 6b, step 2), then re-run the workflow. |
+| Deploy workflow fails: authentication error | The token lacks **Cloudflare Pages: Edit**, or it belongs to a different account than `CLOUDFLARE_ACCOUNT_ID`. |
+| Live site runs old code after a merge | Check Pages → Deployments for a **Production** deployment of that commit. A preview-only deploy means the production branch is wrong (row above). |
 
 ### Live logs
 
@@ -326,5 +370,10 @@ shows every Telegram message and database error in real time.
 
 ### Updating later
 
-Push to `main` — Cloudflare rebuilds and redeploys automatically. Secrets and
-the KV binding are configured once and survive redeploys.
+Push to `main` — Cloudflare rebuilds and redeploys automatically (or the GitHub
+Actions workflow from Part 6b does, if you set it up). Secrets and the KV
+binding are configured once and survive redeploys.
+
+After a deploy, check that the newest deployment has a **Production** badge and
+the right commit. If it says **Preview**, Part 6b / the Production branch
+setting is the reason.
