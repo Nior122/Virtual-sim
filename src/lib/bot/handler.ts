@@ -34,7 +34,7 @@ import {
 } from "./bulk";
 import type { BulkEntry, PreparedBulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
-import { generatePersonaResponse } from "../ai/provider";
+import { generatePersonaResponse, providerStatus } from "../ai/provider";
 import { sanitizeHumanChatOutput } from "../../utils/mediaRequest";
 import { getPersonaForChat } from "../db/neon";
 import {
@@ -134,7 +134,8 @@ Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
 /diag <url> — show what the scraper sees on a page (status, <img> count, JPEG checks)
-/chatcheck <slug> [question] — test a profile's chat engine (shows which AI answered)
+/chatcheck <slug> [question] — test a profile's chat engine (shows the configured
+  providers, which one answered, and the provider variable names still missing)
 /profiles [page] — every profile with its slug, image count and video count
 /bulk <list> — prepare up to 25 profiles at once (nothing is created yet)
   separate entries with commas or newlines; "A & B" takes images from A and
@@ -805,6 +806,8 @@ async function handleCommand(
         return;
       }
 
+      const configLines = providerStatus(env as any);
+
       const started = Date.now();
       try {
         const { content, provider } = await generatePersonaResponse({
@@ -836,10 +839,14 @@ async function handleCommand(
             `\n` +
             `Engine: ${provider} · ${Date.now() - started} ms` +
             (provider.includes("Engine")
-              ? `\n\n⚠ No AI provider answered — GROQ_API_KEY / OPENROUTER_API_KEY ` +
-                `are missing, invalid, or the model name is retired. Every chat ` +
-                `falls back to canned lines until one works.`
+              ? `\n\n⚠ No AI provider answered. Set BOTH the key and the model ` +
+                `variable for at least one provider (GROQ_API_KEY + GROQ_MODEL, ` +
+                `OPENROUTER_API_KEY + OPENROUTER_MODEL, or OPENAI_API_KEY + ` +
+                `OPENAI_MODEL) and redeploy. Until then every chat uses the ` +
+                `offline fallback.`
               : "") +
+            `\n\nProviders (from env, no model IDs hardcoded):\n` +
+            configLines.map((line) => `  ${line}`).join("\n") +
             `\n\nStored systemPrompt: ${String(row.systemPrompt || "(none)").slice(0, 200)}`
         );
       } catch (err) {

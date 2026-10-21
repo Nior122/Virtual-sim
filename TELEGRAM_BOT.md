@@ -176,14 +176,21 @@ as the call screen would, and reports the engine:
 Chat check for Ava (/ava)
 Question: what's your name?
 
-Reply: Ava, nice to meet you 😊
+Engine reply: Ava, nice to meet you 😊
+Call screen shows: Ava, nice to meet you 😊
 
-Engine: Groq (llama-3.3-70b-versatile) · 640 ms
+Engine: Groq (your-configured-model) · 640 ms
+
+Providers (from env, no model IDs hardcoded):
+  • Groq — your-configured-model (primary)
+  • OpenRouter skipped: OPENROUTER_MODEL is not set (model IDs come from the environment only)
 ```
 
 If it says `Engine: Dreamgirl Engine`, **no AI provider answered** — every chat
-is falling back to canned lines. Check `GROQ_API_KEY` / `GROQ_MODEL` on the
-Pages project (a retired model name is a common cause) and redeploy.
+is falling back to canned lines. The provider list above the engine line names
+the missing variable, usually `GROQ_MODEL`/`OPENROUTER_MODEL`: model IDs are
+read from the environment only and have no built-in defaults, so both the key
+**and** the model must be set on the Pages project, then redeploy.
 
 ### Editing an existing profile
 
@@ -221,10 +228,15 @@ Set in Pages → project → Settings → Environment variables (Production):
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | BotFather token |
 | `TELEGRAM_WEBHOOK_SECRET` | Random string, also passed to `setWebhook` |
-| `GROQ_API_KEY` | Groq key (optional when OpenRouter is set) |
-| `GROQ_MODEL` | Optional, defaults to `llama-3.3-70b-versatile` |
-| `OPENROUTER_API_KEY` | Optional OpenRouter key — automatic fallback writer |
-| `OPENROUTER_MODEL` | Optional, defaults to `meta-llama/llama-3.3-70b-instruct` |
+| `GROQ_API_KEY` | Groq key (optional when another provider is set) |
+| `GROQ_MODEL` | **Required for Groq** — model ID from the Groq console |
+| `OPENROUTER_API_KEY` | Optional OpenRouter key — automatic fallback |
+| `OPENROUTER_MODEL` | **Required for OpenRouter** — model ID from OpenRouter |
+| `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional any OpenAI-compatible gateway (`AI_*` aliases) |
+| `AI_PROVIDER_ORDER` | Optional attempt order, default `groq,openrouter,openai` |
+
+> No model ID is hardcoded anywhere. A provider is skipped (and reported in
+> `/chatcheck`) when its key or its model variable is missing.
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `PUBLIC_BASE_URL` | Public Pages URL (optional; falls back to request origin) |
 

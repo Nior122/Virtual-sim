@@ -1,5 +1,12 @@
 import { Persona, ChatMessage } from "../../types";
 import { buildPersonaContext } from "./persona-context";
+import {
+  describeProvider,
+  providerStatus,
+  requestChatCompletion,
+  resolveProviders,
+  type EnvLike,
+} from "./openai-compatible";
 
 interface GenerateParams {
   persona: Persona;
@@ -7,58 +14,11 @@ interface GenerateParams {
   envOverride?: Record<string, any>;
 }
 
-function getEnvValue(envOverride: Record<string, any> | undefined, key: string): string | undefined {
-  if (envOverride && envOverride[key]) return envOverride[key];
-  if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
-  return undefined;
-}
+/** Re-exported so the bot can explain what is (not) configured. */
+export { providerStatus, resolveProviders };
 
-export async function callOpenAICompatible(
-  url: string,
-  apiKey: string,
-  model: string,
-  messages: any[],
-  maxTokens: number = 80,
-  timeoutMs: number = 9000,
-  extraHeaders: Record<string, string> = {}
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...extraHeaders,
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.85,
-        max_tokens: maxTokens,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(`Provider API Error (${response.status}): ${errorText.slice(0, 120)}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content || typeof content !== "string" || content.trim().length === 0) {
-      throw new Error("Empty response from AI provider");
-    }
-
-    return content.trim();
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+/** Name reported when no AI provider answered. */
+export const OFFLINE_ENGINE = "Dreamgirl Engine";
 
 /**
  * Offline answer used only when every AI provider is unavailable.
@@ -126,13 +86,9 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
 }
 
 /**
- * Build a clean chat history for the model.
- *
- * Two things used to confuse the reply: attachment-only turns arrive with an
- * empty `content` (the model sees a blank turn and answers the previous
- * message), and the client can send several assistant rows in a row. Empty
- * turns are dropped and consecutive same-role turns merged, keeping the most
- * recent user message intact at the end.
+ * Clean chat history for the model: blank attachment turns are dropped
+ * (the model used to answer the previous message instead), same-role turns
+ * merged, and the conversation always ends on the user's real message.
  */
 export function prepareHistory(
   messages: Pick<ChatMessage, "role" | "content">[],
@@ -174,73 +130,40 @@ export async function generatePersonaResponse({
   const lastUserMsg =
     [...recentMessages].reverse().find((m) => m.role === "user")?.content || "";
 
-  // 1. PRIMARY: Groq (ultra-fast OpenAI-compatible API)
-  const groqApiKey = getEnvValue(envOverride, 'GROQ_API_KEY');
-  if (groqApiKey) {
+  // Providers come from the environment: endpoint + API key + model. No model
+  // ID is hardcoded, so a retired model is a config error instead of silent
+  // fallback behaviour, and any OpenAI-compatible gateway can be used.
+  const { providers, skipped } = resolveProviders(envOverride as EnvLike);
+
+  if (providers.length === 0) {
+    console.warn(
+      `No AI provider configured for chat — ${skipped
+        .map((entry) => `${entry.label}: ${entry.reason}`)
+        .join("; ")}`
+    );
+  }
+
+  for (const provider of providers) {
     try {
-      const model = getEnvValue(envOverride, 'GROQ_MODEL') || "llama-3.3-70b-versatile";
-      const content = await callOpenAICompatible(
-        "https://api.groq.com/openai/v1/chat/completions",
-        groqApiKey,
-        model,
-        formattedMessages,
-        160,
-        12000
-      );
-      return { content: sanitizeOutput(content), provider: `Groq (${model})` };
+      const content = await requestChatCompletion(provider, {
+        messages: formattedMessages,
+        temperature: 0.85,
+        max_tokens: 160,
+      });
+      return { content: sanitizeOutput(content), provider: describeProvider(provider) };
     } catch (err: any) {
-      console.warn("Groq request failed, switching to fallback provider:", err?.message || err);
+      console.warn(
+        `${provider.label} request failed, trying the next provider:`,
+        err?.message || err
+      );
     }
   }
 
-  // 2. FALLBACK: OpenRouter (OpenRouter API)
-  const openRouterApiKey = getEnvValue(envOverride, 'OPENROUTER_API_KEY');
-  if (openRouterApiKey) {
-    try {
-      const model = getEnvValue(envOverride, 'OPENROUTER_MODEL') || "meta-llama/llama-3.3-70b-instruct";
-      const content = await callOpenAICompatible(
-        "https://openrouter.ai/api/v1/chat/completions",
-        openRouterApiKey,
-        model,
-        formattedMessages,
-        160,
-        12000,
-        {
-          "HTTP-Referer": "https://dreamgirl.app",
-          "X-Title": "Dreamgirl AI",
-        }
-      );
-      return { content: sanitizeOutput(content), provider: `OpenRouter (${model})` };
-    } catch (err: any) {
-      console.warn("OpenRouter fallback request failed:", err?.message || err);
-    }
-  }
-
-  // 3. OPTIONAL SECONDARY FALLBACK: Standard OpenAI API or OpenAI Proxy
-  const openAiApiKey = getEnvValue(envOverride, 'OPENAI_API_KEY');
-  if (openAiApiKey) {
-    try {
-      const baseUrl = (getEnvValue(envOverride, 'OPENAI_BASE_URL') || "https://api.openai.com/v1").replace(/\/+$/, "");
-      const model = getEnvValue(envOverride, 'OPENAI_MODEL') || "gpt-4o-mini";
-      const content = await callOpenAICompatible(
-        `${baseUrl}/chat/completions`,
-        openAiApiKey,
-        model,
-        formattedMessages,
-        160,
-        12000
-      );
-      return { content: sanitizeOutput(content), provider: `OpenAI (${model})` };
-    } catch (err: any) {
-      console.warn("OpenAI fallback request failed:", err?.message || err);
-    }
-  }
-
-  // 4. FINAL SAFEGUARD: Native Persona Response Engine (Zero-Downtime Guarantee)
-  console.info("Using persona dynamic fallback (no active API key or all network calls timed out)");
+  // Last resort: answer from the persona record (canned but on-topic).
+  console.info("Using persona dynamic fallback (no active provider or all calls failed)");
   return {
     content: getLocalFallbackResponse(persona, lastUserMsg),
-    provider: "Dreamgirl Engine",
+    provider: OFFLINE_ENGINE,
   };
 }
 

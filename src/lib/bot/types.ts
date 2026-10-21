@@ -8,15 +8,30 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   /** Shared secret sent by Telegram as X-Telegram-Bot-Api-Secret-Token */
   TELEGRAM_WEBHOOK_SECRET: string;
-  /** Groq OpenAI-compatible API key (optional when OpenRouter is set) */
+  /** Groq OpenAI-compatible API key (optional when another provider is set) */
   GROQ_API_KEY?: string;
-  /** Optional Groq model override (defaults to llama-3.3-70b-versatile) */
+  /** Groq model ID — REQUIRED to use Groq. No model is hardcoded. */
   GROQ_MODEL?: string;
+  /** Optional Groq-compatible endpoint override */
+  GROQ_BASE_URL?: string;
   /** OpenRouter API key — fallback writer when Groq is missing or fails */
   OPENROUTER_API_KEY?: string;
-  /** Optional OpenRouter model override
-   *  (defaults to meta-llama/llama-3.3-70b-instruct) */
+  /** OpenRouter model ID — REQUIRED to use OpenRouter. No model is hardcoded. */
   OPENROUTER_MODEL?: string;
+  /** Optional OpenRouter-compatible endpoint override */
+  OPENROUTER_BASE_URL?: string;
+  /** Any OpenAI-compatible gateway (OPENAI_* or AI_* aliases) */
+  OPENAI_API_KEY?: string;
+  /** Model ID for the generic provider — REQUIRED to use it */
+  OPENAI_MODEL?: string;
+  /** Base URL for the generic provider, e.g. https://api.openai.com/v1 */
+  OPENAI_BASE_URL?: string;
+  /** Aliases for the generic provider */
+  AI_API_KEY?: string;
+  AI_MODEL?: string;
+  AI_BASE_URL?: string;
+  /** Attempt order, e.g. "openrouter,groq" (defaults to groq,openrouter,openai) */
+  AI_PROVIDER_ORDER?: string;
   /** Neon PostgreSQL connection string (serverless driver, HTTPS) */
   DATABASE_URL: string;
   /** Public base URL of THIS Pages project (media + profile links).

@@ -17,6 +17,7 @@ const FEATURES = [
   "public-base-url-normalisation",
   "diag-command",
   "chatcheck-command",
+  "env-model-providers",
 ];
 
 export async function onRequestGet(): Promise<Response> {

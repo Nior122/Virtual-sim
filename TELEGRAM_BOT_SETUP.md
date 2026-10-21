@@ -193,12 +193,19 @@ KV stores each chat's in-progress profile and the media allowlist.
    |---|---|---|
    | `TELEGRAM_BOT_TOKEN` | Secret | token from Part 4 |
    | `TELEGRAM_WEBHOOK_SECRET` | Secret | invent a long random string, e.g. `whsec_9fK2xP7mQ4vL8nR1` |
-   | `GROQ_API_KEY` | Secret | `gsk_...` key from Part 5 (or leave empty with OpenRouter) |
+   | `GROQ_API_KEY` | Secret | `gsk_...` key from Part 5 (or leave empty with another provider) |
+   | `GROQ_MODEL` | Plaintext | the model ID exactly as Groq lists it (console.groq.com/docs/models) |
    | `DATABASE_URL` | Secret | Neon connection string from Part 3 |
    | `PUBLIC_BASE_URL` | Plaintext | your Pages URL, no trailing slash |
-   | `GROQ_MODEL` | Plaintext | `llama-3.3-70b-versatile` |
    | `OPENROUTER_API_KEY` | Secret, optional | `sk-or-...` key from Part 5 |
-   | `OPENROUTER_MODEL` | Plaintext, optional | `meta-llama/llama-3.3-70b-instruct` |
+   | `OPENROUTER_MODEL` | Plaintext, optional | the model ID exactly as OpenRouter lists it |
+   | `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional | any other OpenAI-compatible gateway; `AI_API_KEY`/`AI_MODEL`/`AI_BASE_URL` aliases work |
+   | `AI_PROVIDER_ORDER` | Plaintext, optional | attempt order, default `groq,openrouter,openai` |
+
+   > **Model IDs are never hardcoded.** A provider is used only when **both**
+   > its key and its model variable are set; otherwise it is skipped and
+   > `/chatcheck` says which variable is missing. Set `GROQ_MODEL` and
+   > `OPENROUTER_MODEL` explicitly — they no longer have built-in defaults.
 
 3. Save. Then open **Deployments**, click the **⋯ menu** on the latest
    deployment → **Retry deployment** so the variables take effect.
@@ -342,7 +349,8 @@ In your Telegram bot chat:
 | Video over 20 MB rejected | Telegram bots can't download bigger files — send it as a direct URL instead. |
 | Embed/HLS video doesn't play on Pages | The Express-only `/api/hls-proxy` route doesn't exist on Pages. Use direct `.mp4`/`.webm` URLs or bot-uploaded files. |
 | Scrape finds no images (again) | Run `/diag <that url>`: it shows the HTTP status, `<img>` count, the candidate URLs and whether each is served as JPEG. If candidates say `NOT a JPEG ✗`, the site only has WebP/PNG; if there are 0 candidates, the page is JavaScript-built. Paste the report to get an exact fix. |
-| Chat gives generic / unrelated answers | Run `/chatcheck <slug> what's your name?`. `Engine: Dreamgirl Engine` means no AI provider answered (bad/missing `GROQ_API_KEY` or a retired `GROQ_MODEL`) and every reply is a canned fallback. Otherwise the reply comes from the persona prompt and should answer the question. |
+| Chat gives generic / unrelated answers | Run `/chatcheck <slug> what's your name?`. It lists the configured providers and their model IDs, then the engine that answered. `Engine: Dreamgirl Engine` means nothing answered — usually a missing `GROQ_MODEL`/`OPENROUTER_MODEL` (no model defaults exist any more) or an invalid key. |
+| `/chatcheck` says "«PROVIDER»_MODEL is not set" | Model IDs come only from the environment. Add `GROQ_MODEL` / `OPENROUTER_MODEL` (or `OPENAI_MODEL`) with the exact model ID from the provider, then redeploy. |
 | Is the live site running the new code? | Open `https://<your-site>/api/health`. The `features` list is served by the deployed Functions; if it is missing or short, production is still on an older build (see the preview-only deployment row below). |
 | `/scrape` says blocked or no data | The page uses a browser/Cloudflare challenge or renders only in JavaScript, which a Worker can't load. Send the media and write-up manually. |
 | `/scrape` returns few images | Only JPEG photos are imported; PNG, SVG logos, webp/gif thumbnails, icons and sprites are filtered out on purpose. The reply says how many image URLs were seen and rejected. Raise the post-page count (`/scrape <url> 50 5 6`) if the images sit inside posts. |

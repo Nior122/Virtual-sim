@@ -7,14 +7,30 @@ TELEGRAM_BOT_TOKEN="123456:ABC-DEF..."
 # Any random string; must match the secret_token used in setWebhook
 TELEGRAM_WEBHOOK_SECRET="change-me-long-random-string"
 
-# Groq (https://console.groq.com/keys)
-GROQ_API_KEY=""
-GROQ_MODEL="llama-3.3-70b-versatile"
+# ---------------------------------------------------------------------------
+# AI providers (OpenAI-compatible). NO model is hardcoded in the code: a
+# provider is used only when BOTH its API key and its model ID are set here.
+# ---------------------------------------------------------------------------
 
-# OpenRouter (https://openrouter.ai/keys) — optional. Used automatically when
-# GROQ_API_KEY is missing or Groq fails.
+# Groq (https://console.groq.com/keys) — paste the model ID exactly as the
+# provider lists it, e.g. from https://console.groq.com/docs/models
+GROQ_API_KEY=""
+GROQ_MODEL=""
+# GROQ_BASE_URL=""            # optional endpoint override
+
+# OpenRouter (https://openrouter.ai/keys) — used when Groq fails or is unset.
 OPENROUTER_API_KEY=""
-OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
+OPENROUTER_MODEL=""
+# OPENROUTER_BASE_URL=""      # optional endpoint override
+
+# Any other OpenAI-compatible gateway (vLLM, LiteLLM, Together, …).
+# OPENAI_API_KEY=""
+# OPENAI_MODEL=""
+# OPENAI_BASE_URL="https://api.openai.com/v1"
+# Aliases AI_API_KEY / AI_MODEL / AI_BASE_URL work the same way.
+
+# Attempt order. Default: groq,openrouter,openai
+# AI_PROVIDER_ORDER="openrouter,groq"
 
 # Neon PostgreSQL connection string (Neon dashboard -> Connection string)
 DATABASE_URL="postgresql://user:password@ep-xxxx-pooler.aws.neon.tech/neondb?sslmode=require"
