@@ -59,8 +59,17 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/links` — list every image and video URL currently in the draft
 - `/profiles [page]` — every profile with its slug plus image and video counts
   (20 per page), e.g. `Ava — slug: ava · 5 image(s) · 12 video(s)`
-- `/bulk <list>` — scrape many pages at once and create one profile per entry
-  (see below); `/bulknext` continues a queued batch, `/bulkcancel` drops it
+- `/bulk <list>` — scrape many pages at once and prepare one profile per entry
+  (see below); `/bulknext` prepares the rest of the queue, `/confirm` creates
+  them, `/bulkcancel` drops the batch
+- `/diag <url>` — what the scraper sees on a page: HTTP status, `<img>` count,
+  candidate image URLs and whether each is really served as JPEG
+- `/chatcheck <slug> [question]` — ask a stored profile a question outside the
+  call screen and see which engine answered (Groq, OpenRouter or the offline
+  fallback) plus the raw reply
+- `/health` in a browser: `https://<your-site>/api/health` lists the deployed
+  features, so you can confirm the live site runs the latest code
+
 
 ### Bulk generation
 
@@ -129,6 +138,52 @@ write-ups and URLs, /skip <n> to drop one, /cancelbulk to discard.
   scraped title/description and marked `text fallback`.
 - `/checkvideos <slug>` — probe an existing profile's stored video URLs and
   report which ones have a real playable stream (read-only)
+
+### When a scrape finds no images
+
+The reply distinguishes the causes:
+
+| Reply | Meaning | Fix |
+|---|---|---|
+| `N image URL(s) were rejected — they are WebP/PNG/GIF…` | the page only offers WebP/PNG | the bot already retries `x.webp` → `x.jpg` and `?fm=jpg`; if that fails the site has no JPEG photos |
+| `no JPEG images found` with 0 candidates | no image markup at all | the page is built by JavaScript — copy a post/gallery link, or run `/diag <url>` |
+| `The site blocked the request (HTTP 403)` | bot protection | not scrapable from a Worker |
+
+`/diag <url>` prints what the scraper sees, so an empty scrape can be explained
+instead of guessed:
+
+```
+Diagnostics for https://site.com/models/ava
+HTTP 200 · text/html; charset=utf-8 · 184 KB
+Title: Ava — Model
+<img> tags: 24 · <source> tags: 3
+Image candidates: 12 usable · 8 WebP/PNG
+
+Candidates found:
+1. https://cdn.site.com/media/9f2a…/1280
+   served as JPEG ✓
+
+WebP/PNG only (rejected, JPEG variant will be tried):
+• https://cdn.site.com/media/aa11….webp
+```
+
+### Checking the chat engine
+
+`/chatcheck ava what's your name?` asks the stored profile a question exactly
+as the call screen would, and reports the engine:
+
+```
+Chat check for Ava (/ava)
+Question: what's your name?
+
+Reply: Ava, nice to meet you 😊
+
+Engine: Groq (llama-3.3-70b-versatile) · 640 ms
+```
+
+If it says `Engine: Dreamgirl Engine`, **no AI provider answered** — every chat
+is falling back to canned lines. Check `GROQ_API_KEY` / `GROQ_MODEL` on the
+Pages project (a retired model name is a common cause) and redeploy.
 
 ### Editing an existing profile
 

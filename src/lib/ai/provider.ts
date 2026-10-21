@@ -61,12 +61,19 @@ export async function callOpenAICompatible(
 }
 
 /**
- * Generates natural fallback responses tailored to the persona when API keys are not provided
+ * Offline answer used only when every AI provider is unavailable.
+ *
+ * It used to return one of five random greetings no matter what was asked —
+ * which reads as "I asked a question and she answered something else". This
+ * version answers the actual question from the persona's own fields and falls
+ * back to a reply that at least references what the user said.
  */
 function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): string {
-  const text = (lastUserMessage || "").toLowerCase();
+  const text = (lastUserMessage || "").toLowerCase().trim();
+  const name = persona.name || "me";
+  const location = [persona.city, persona.country].filter(Boolean).join(", ");
 
-  // Socials / Manager / Dates
+  // Socials / Manager / Dates (kept exactly as before)
   if (
     /social|instagram|ig|snap|snapchat|telegram|whatsapp|phone|number|digits|date|meet|meetup|dinner|drinks/i.test(
       text
@@ -75,20 +82,79 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
     return `Mmm you'll have to reach out to my manager on Telegram for that: t.me/Dreamgirlteam 😉✨`;
   }
 
-  // Are you a bot / Prove it / Call
+  // Are you a bot / Prove it / Call (kept exactly as before)
   if (/bot|real|fake|ai|robot|prove/i.test(text)) {
     return `Haha excuse me?! 😂 I'm 100% real babe. Let me call you right now! 📞`;
   }
 
-  // Flirty / General greetings
-  const greetings = [
-    `Hey there! I was just thinking about you... what are you up to? 😉`,
-    `Haha you're cute! Tell me something fun about your day ✨`,
-    `Just relaxing at home... so glad you messaged me 💕`,
-    `Mmm you always know how to make me smile 😏`,
-    `Hey babe! How is your day going so far? 🌸`,
-  ];
-  return greetings[Math.floor(Math.random() * greetings.length)];
+  // Direct questions about the persona are answerable from the record.
+  if (/\b(your|ur)\s+(name|full name)\b|\bwhat('| i)?s your name\b|\bwho are you\b/.test(text)) {
+    return `It's ${name} 😊 What should I call you?`;
+  }
+  if (/\bhow old\b|\byour age\b|\bage\b.*\?/.test(text) && persona.age) {
+    return `I'm ${persona.age} 😉 Does that matter to you?`;
+  }
+  if (/\bwhere (are you|do you live|r u)\b|\bwhere'?s? (home|from)\b|\byour city\b/.test(text)) {
+    return location
+      ? `I'm in ${location} 🌸 Where are you texting me from?`
+      : `Somewhere warm and quiet right now 😏 Where are you?`;
+  }
+  if (/\bwhat do you do\b|\byour job\b|\bwork\b|\boccupation\b/.test(text)) {
+    return persona.occupation
+      ? `I'm a ${persona.occupation.toLowerCase()} — keeps me busy 😌 What about you?`
+      : `A bit of everything, honestly 😅 What do you do?`;
+  }
+  if (/\bhow are you\b|\bhow('| i)?s your day\b|\bhow you doing\b|\bwyd\b|\bwhat are you doing\b/.test(text)) {
+    return `Just chilling and thinking about you 😏 What are you up to?`;
+  }
+  if (/\b(hi|hey|hello|yo|sup)\b/.test(text)) {
+    return `Hey you 😊 I was hoping you'd message. How's your day going?`;
+  }
+  if (/\bthank(s| you)\b/.test(text)) {
+    return `Anytime babe 😘 Tell me something about your day.`;
+  }
+  if (/\b(bye|goodnight|good night|talk later|gtg)\b/.test(text)) {
+    return `Don't stay away too long 😉 Goodnight.`;
+  }
+
+  // Nothing matched: still respond to what they said instead of a random line.
+  const topic = lastUserMessage.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (lastUserMessage.includes("?")) {
+    return `Mmm good question 😏 ${topic.replace(/\?+$/, "")} — tell me what you think first.`;
+  }
+  return `Mmm I like that 😊 Tell me more about "${topic}".`;
+}
+
+/**
+ * Build a clean chat history for the model.
+ *
+ * Two things used to confuse the reply: attachment-only turns arrive with an
+ * empty `content` (the model sees a blank turn and answers the previous
+ * message), and the client can send several assistant rows in a row. Empty
+ * turns are dropped and consecutive same-role turns merged, keeping the most
+ * recent user message intact at the end.
+ */
+export function prepareHistory(
+  messages: Pick<ChatMessage, "role" | "content">[],
+  limit = 12
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const cleaned: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const message of messages) {
+    const content = String(message.content || "").trim();
+    if (!content) continue;
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const previous = cleaned[cleaned.length - 1];
+    if (previous && previous.role === role) {
+      previous.content = `${previous.content}\n${content}`.slice(-2000);
+      continue;
+    }
+    cleaned.push({ role, content });
+  }
+  // Always end on the user's turn — that is the message being answered.
+  while (cleaned.length > 1 && cleaned[cleaned.length - 1].role !== "user") {
+    cleaned.pop();
+  }
+  return cleaned.length > limit ? cleaned.slice(-limit) : cleaned;
 }
 
 export async function generatePersonaResponse({
@@ -98,18 +164,15 @@ export async function generatePersonaResponse({
 }: GenerateParams): Promise<{ content: string; provider: string }> {
   const systemPrompt = buildPersonaContext(persona);
 
-  // Truncate history to last 10 messages to maintain a tight, fast context
-  const recentMessages = messages.length > 10 ? messages.slice(-10) : messages;
+  const recentMessages = prepareHistory(messages);
 
   const formattedMessages = [
     { role: "system", content: systemPrompt },
-    ...recentMessages.map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    })),
+    ...recentMessages,
   ];
 
-  const lastUserMsg = messages[messages.length - 1]?.content || "";
+  const lastUserMsg =
+    [...recentMessages].reverse().find((m) => m.role === "user")?.content || "";
 
   // 1. PRIMARY: Groq (ultra-fast OpenAI-compatible API)
   const groqApiKey = getEnvValue(envOverride, 'GROQ_API_KEY');
@@ -121,8 +184,8 @@ export async function generatePersonaResponse({
         groqApiKey,
         model,
         formattedMessages,
-        80,
-        9000
+        160,
+        12000
       );
       return { content: sanitizeOutput(content), provider: `Groq (${model})` };
     } catch (err: any) {
@@ -140,8 +203,8 @@ export async function generatePersonaResponse({
         openRouterApiKey,
         model,
         formattedMessages,
-        80,
-        9000,
+        160,
+        12000,
         {
           "HTTP-Referer": "https://dreamgirl.app",
           "X-Title": "Dreamgirl AI",
@@ -164,8 +227,8 @@ export async function generatePersonaResponse({
         openAiApiKey,
         model,
         formattedMessages,
-        80,
-        9000
+        160,
+        12000
       );
       return { content: sanitizeOutput(content), provider: `OpenAI (${model})` };
     } catch (err: any) {

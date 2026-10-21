@@ -34,6 +34,9 @@ import {
 } from "./bulk";
 import type { BulkEntry, PreparedBulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
+import { generatePersonaResponse } from "../ai/provider";
+import { sanitizeHumanChatOutput } from "../../utils/mediaRequest";
+import { getPersonaForChat } from "../db/neon";
 import {
   isDirectVideoUrl,
   isEmbedUrl,
@@ -50,6 +53,7 @@ import {
   HARD_MAX_DETAIL_PAGES,
   HARD_MAX_PAGES,
   MAX_VIDEO_LIMIT,
+  inspectPage,
   scrapeProfile,
 } from "./scrape";
 import {
@@ -129,6 +133,8 @@ Then send, in any order:
 Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
+/diag <url> — show what the scraper sees on a page (status, <img> count, JPEG checks)
+/chatcheck <slug> [question] — test a profile's chat engine (shows which AI answered)
 /profiles [page] — every profile with its slug, image count and video count
 /bulk <list> — prepare up to 25 profiles at once (nothing is created yet)
   separate entries with commas or newlines; "A & B" takes images from A and
@@ -583,6 +589,81 @@ async function handleCommand(
       return;
     }
 
+    case "/diag": {
+      const target = arg.trim();
+      if (!/^https?:\/\//i.test(target)) {
+        await sendMessage(
+          env,
+          chatId,
+          `Usage: /diag <page url>\n` +
+            `Reports what the scraper sees: HTTP status, content type, how many <img> tags, ` +
+            `the image URLs it found and whether each is really served as JPEG.`
+        );
+        return;
+      }
+      await sendMessage(env, chatId, "Inspecting that page…");
+      try {
+        const report = await inspectPage(target, 6);
+        const lines: string[] = [`Diagnostics for ${target}`, ""];
+        if (report.error) {
+          lines.push(`✗ Fetch failed: ${report.error}`);
+        } else {
+          lines.push(`HTTP ${report.status} · ${report.contentType || "no content-type"} · ${Math.round(
+            report.bytes / 1024
+          )} KB`);
+          if (report.title) lines.push(`Title: ${report.title.slice(0, 120)}`);
+          lines.push(
+            `<img> tags: ${report.imgTags} · <source> tags: ${report.sourceTags}`
+          );
+          if (report.challenge) {
+            lines.push(
+              "⚠ This is a Cloudflare/browser challenge page — a Worker cannot scrape it."
+            );
+          }
+          lines.push(
+            `Image candidates: ${report.primary.length + report.secondary.length} usable · ` +
+              `${report.nonJpegUrls.length} WebP/PNG`
+          );
+
+          const usable = [...report.primary, ...report.secondary].slice(0, 6);
+          if (usable.length > 0) {
+            lines.push("", "Candidates found:");
+            usable.forEach((url, index) => {
+              const probe = report.probes.find((entry) => entry.url === url);
+              const verdict =
+                probe === undefined
+                  ? "JPEG by URL"
+                  : probe.ok
+                    ? "served as JPEG ✓"
+                    : "NOT a JPEG ✗";
+              lines.push(`${index + 1}. ${url.slice(0, 150)}\n   ${verdict}`);
+            });
+          }
+          if (report.nonJpegUrls.length > 0) {
+            lines.push("", "WebP/PNG only (rejected, JPEG variant will be tried):");
+            report.nonJpegUrls.slice(0, 4).forEach((url) => {
+              lines.push(`• ${url.slice(0, 150)}`);
+            });
+          }
+          if (
+            report.primary.length + report.secondary.length === 0 &&
+            report.nonJpegUrls.length === 0
+          ) {
+            lines.push(
+              "",
+              report.imgTags + report.sourceTags === 0
+                ? "No image markup at all — the page is built by JavaScript. Copy a post/gallery link instead."
+                : "Image tags exist but no usable URL was found — paste this report and the page URL."
+            );
+          }
+        }
+        await sendMessage(env, chatId, lines.join("\n"));
+      } catch (err) {
+        await sendMessage(env, chatId, `Diagnostics failed: ${(err as Error).message}`);
+      }
+      return;
+    }
+
     case "/image": {
       const draft = await ensureDraft(env, chatId);
       if (!arg) {
@@ -692,6 +773,78 @@ async function handleCommand(
         `Edit any of them with /edit <slug> · test playback with /checkvideos <slug>`
       );
       await sendMessage(env, chatId, lines.join("\n"));
+      return;
+    }
+
+    case "/chatcheck": {
+      // Reproduces exactly what /api/chat does for a stored profile, so the
+      // answer engine can be verified from inside Telegram (the reply names
+      // the provider; "Dreamgirl Engine" means every AI key failed).
+      const pieces = arg.trim().split(/\s+/);
+      const slug = (pieces[0] || "").toLowerCase();
+      if (!slug) {
+        await sendMessage(
+          env,
+          chatId,
+          `Usage: /chatcheck <slug> [question]\n` +
+            `e.g. /chatcheck ava what's your name?\n` +
+            `Shows which engine answers and the raw reply.`
+        );
+        return;
+      }
+      const question = pieces.slice(1).join(" ").trim() || "hey, how are you?";
+      let row: Record<string, unknown> | null = null;
+      try {
+        row = await getPersonaForChat(env, slug);
+      } catch (err) {
+        await sendMessage(env, chatId, `Lookup failed: ${(err as Error).message}`);
+        return;
+      }
+      if (!row) {
+        await sendMessage(env, chatId, `No active profile with slug "${slug}".`);
+        return;
+      }
+
+      const started = Date.now();
+      try {
+        const { content, provider } = await generatePersonaResponse({
+          // @ts-ignore bare DB row is enough for the prompt builder
+          persona: row,
+          messages: [{ role: "user", content: question }],
+          envOverride: env,
+        });
+        // The call screen passes every reply through its own sanitizer; show
+        // what survives it so a rewritten answer is visible (read-only check).
+        let clientView = content;
+        try {
+          clientView = sanitizeHumanChatOutput(content, String(row.name), question);
+        } catch {
+          clientView = content;
+        }
+        const rewritten = clientView.trim() !== content.trim();
+
+        await sendMessage(
+          env,
+          chatId,
+          `Chat check for ${row.name} (/${slug})\n` +
+            `Question: ${question}\n\n` +
+            `Engine reply: ${content}\n` +
+            (rewritten
+              ? `After the call-screen filter: ${clientView}\n` +
+                `⚠ That filter rewrote the reply — this is what the user sees.\n`
+              : `Call screen shows: ${clientView}\n`) +
+            `\n` +
+            `Engine: ${provider} · ${Date.now() - started} ms` +
+            (provider.includes("Engine")
+              ? `\n\n⚠ No AI provider answered — GROQ_API_KEY / OPENROUTER_API_KEY ` +
+                `are missing, invalid, or the model name is retired. Every chat ` +
+                `falls back to canned lines until one works.`
+              : "") +
+            `\n\nStored systemPrompt: ${String(row.systemPrompt || "(none)").slice(0, 200)}`
+        );
+      } catch (err) {
+        await sendMessage(env, chatId, `Chat check failed: ${(err as Error).message}`);
+      }
       return;
     }
 

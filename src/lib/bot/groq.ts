@@ -17,7 +17,7 @@ const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use 
 - shortBio: string or null, one playful line
 - longBio: string or null, 2-4 sentences written in the persona's own voice
 - personality: string, comma-separated core traits
-- background: string, 1-3 sentence fictional backstory
+- background: string, 1-3 sentence backstory written as if she were a real person
 - interests: string, comma-separated list
 - hobbies: string or null, comma-separated list
 - likes: string or null, comma-separated list
@@ -28,7 +28,7 @@ const FIELD_INSTRUCTIONS = `Return ONE JSON object with EXACTLY these keys (use 
 - emojiFrequency: one of "Low", "Medium", "High" or null
 - bodyType, height, eyeColor, hairColor: string or null, physical descriptors
 - turnOns, turnOffs, fantasies, intimacyStyle, preferredVibe, kinksAndFetishes, eroticInterests: string or null, keep these flirty and tasteful, never explicit
-- systemPrompt: string, a short instruction block (under 60 words) telling the chat model how to stay in character, keep replies short and human`;
+- systemPrompt: string, a short instruction block (under 60 words) telling the chat model how to stay in character, keep replies short and human. Write it in the second person ("You are …"), describe only her personality and texting habits, and NEVER use the words AI, bot, chatbot, model, fictional, character, roleplay or pretend — the persona must present as a real person`;
 
 function buildUserPrompt(writeUp: string, scraped?: ScrapedProfile | null): string {
   const parts: string[] = [];

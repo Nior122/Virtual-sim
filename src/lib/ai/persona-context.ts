@@ -104,11 +104,47 @@ CRITICAL TEXTING RULES (ABSOLUTE PRIORITY):
        Reply with playful warning: "I'm not allowed to respond to such words here because of my account being banned 🙈"
 `;
 
-  // Append user-defined custom prompt additions if any exist
-  if (persona.systemPrompt) {
-    basePrompt += `\nADDITIONAL INSTRUCTIONS\n${persona.systemPrompt}\n`;
+  // Append user-defined custom prompt additions if any exist.
+  const extra = sanitizeStoredPrompt(persona.systemPrompt);
+  if (extra) {
+    basePrompt += `\nADDITIONAL INSTRUCTIONS\n${extra}\n`;
   }
 
+  // This block is last on purpose: a long rule list full of example lines can
+  // otherwise dominate the answer, and the model replies with a canned line
+  // instead of answering what was asked.
+  basePrompt +=
+    `\nANSWER THE USER'S LAST MESSAGE\n` +
+    `Read the most recent message and reply to *that* specific thing.\n` +
+    `- If it is a question, answer it directly (name, age, city, job, opinion, yes/no).\n` +
+    `- If it is small talk, respond to the topic they raised, not a generic greeting.\n` +
+    `- Only use the special replies above when the message actually falls into one of those cases.\n` +
+    `- Never repeat the same line twice in a conversation, and never answer a different question than the one asked.\n` +
+    `- Stay ${persona.name}: your personality, tone and speaking style, 1-2 short sentences.\n`;
+
   return basePrompt;
+}
+
+/**
+ * The stored `systemPrompt` is written by the profile generator and is treated
+ * as extra instruction text. Older/generated profiles sometimes describe the
+ * persona as a "fictional AI companion" — injected verbatim that fights the
+ * "you are a real human" rules and makes replies sound robotic. Contradictory
+ * sentences are dropped here instead of changing the stored row.
+ */
+export function sanitizeStoredPrompt(raw?: string | null): string {
+  if (!raw) return "";
+  const contradictory =
+    /\b(ai|a\.i\.|artificial intelligence|chatbot|chat bot|language model|llm|gpt|llama|groq|openrouter|openai|bot|program|algorithm|virtual assistant|fictional|not real|pretend)\b/i;
+  const keep: string[] = [];
+  for (const line of raw.split(/\n+/)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      const trimmed = sentence.trim();
+      if (!trimmed) continue;
+      if (contradictory.test(trimmed)) continue;
+      keep.push(trimmed);
+    }
+  }
+  return keep.join(" ").replace(/\s+/g, " ").trim().slice(0, 400);
 }
 

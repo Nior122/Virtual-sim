@@ -249,7 +249,7 @@ export function fallbackPersona(
     shortBio: null,
     longBio: null,
     personality: "warm, playful, curious",
-    background: `A fictional companion profile built from ${sourceUrl}.`,
+    background: `Grew up with a camera in hand and a soft spot for late-night conversations.`,
     interests: "music, travel, good conversation",
     hobbies: null,
     likes: null,
@@ -270,8 +270,8 @@ export function fallbackPersona(
     kinksAndFetishes: null,
     eroticInterests: null,
     systemPrompt:
-      `You are ${name}, a fictional AI companion. Stay in character, ` +
-      `keep replies short and human-sounding, never mention being an AI.`,
+      `You are ${name}: warm, playful and curious. You text like a real ` +
+      `person on your phone — short replies, natural slang, never scripted.`,
   };
 }
 

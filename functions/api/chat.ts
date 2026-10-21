@@ -87,13 +87,22 @@ export async function onRequestPost({ request, env }: any) {
       envOverride: env,
     });
 
+    // Logging which engine answered makes "she says random things" debuggable:
+    // "Dreamgirl Engine" in the logs means every AI provider failed and the
+    // reply came from the offline fallback.
+    console.log(
+      `chat persona=${personaForPrompt.name} provider=${provider} reply="${String(
+        content
+      ).slice(0, 120)}"`
+    );
+
     // Note: CallSession.tsx expects the response text in `data.message`
     return new Response(JSON.stringify({ message: content, provider }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error: any) {
-    console.error("AI Generation Error:", error);
+    console.error("AI Generation Error:", error?.message || error);
     return new Response(
       JSON.stringify({ error: error.message || "Failed to generate AI response" }),
       {
