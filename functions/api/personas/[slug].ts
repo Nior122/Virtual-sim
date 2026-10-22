@@ -1,6 +1,7 @@
 import type { Env } from "../../../src/lib/bot/types";
 import { getPublicPersonaBySlug } from "../../../src/lib/db/neon";
 import { toPlaybackUrl } from "../../../src/lib/video/playback";
+import { resolveRequestAccess } from "../../../src/lib/access/mode";
 
 /**
  * Single public persona with its videos, read directly from Neon.
@@ -10,9 +11,11 @@ import { toPlaybackUrl } from "../../../src/lib/video/playback";
 export async function onRequestGet({
   env,
   params,
+  request,
 }: {
   env: Env;
   params: { slug?: string };
+  request: Request;
 }): Promise<Response> {
   const slug = decodeURIComponent(params.slug || "");
   if (!slug) {
@@ -20,6 +23,29 @@ export async function onRequestGet({
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  // Defence in depth: `_middleware.ts` already blocks this, but the endpoint
+  // refuses to hand out a profile to a visitor whose share link names another
+  // one. A missing/expired cookie simply means "no profile".
+  let privateMode = false;
+  try {
+    const access = await resolveRequestAccess(env, request);
+    privateMode = access.mode.enabled;
+    if (privateMode) {
+      const allowed = access.link ? access.link.slug.toLowerCase() : null;
+      if (!allowed || allowed !== slug.toLowerCase()) {
+        return new Response(JSON.stringify({ error: "Persona not found" }), {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+    }
+  } catch {
+    // A KV failure falls through to the normal lookup below.
   }
 
   try {
@@ -45,7 +71,9 @@ export async function onRequestGet({
     return new Response(JSON.stringify(persona), {
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=60",
+        // Private mode is per-visitor, so the response must not be cached
+        // publicly and served to someone without a share link.
+        "Cache-Control": privateMode ? "no-store, max-age=0" : "public, max-age=60",
       },
     });
   } catch (err) {

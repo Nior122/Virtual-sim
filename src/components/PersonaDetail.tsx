@@ -37,6 +37,7 @@ import {
   Lock
 } from "lucide-react";
 import Footer from "./Footer";
+import { usePrivateMode } from "../hooks/useSiteMode";
 import {
   getPersonaOnlineStatus,
   togglePersonaOnlineStatus,
@@ -65,6 +66,9 @@ export default function PersonaDetail() {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
+  // Private mode: this page is the only one a visitor may see, so the footer
+  // (and its home / browse links) is not rendered at all.
+  const isPrivate = usePrivateMode();
   const [readMore, setReadMore] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [status, setStatus] = useState<PersonaOnlineStatus>(() =>
@@ -245,12 +249,18 @@ export default function PersonaDetail() {
     return (
       <div className="min-h-screen bg-[#07080e] text-white flex flex-col items-center justify-center p-6">
         <h1 className="text-xl font-bold mb-4">Dreamgirl Not Found</h1>
-        <Link
-          to="/dreamgirls"
-          className="px-5 py-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 text-xs font-semibold"
-        >
-          Explore Dreamgirls
-        </Link>
+        {isPrivate ? (
+          <p className="text-xs text-neutral-400">
+            This profile is not available.
+          </p>
+        ) : (
+          <Link
+            to="/dreamgirls"
+            className="px-5 py-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 text-xs font-semibold"
+          >
+            Explore Dreamgirls
+          </Link>
+        )}
       </div>
     );
   }
@@ -275,13 +285,19 @@ export default function PersonaDetail() {
     <div className="flex flex-col min-h-screen bg-[#07080e] text-neutral-100 selection:bg-pink-500/30">
       {/* TOP COMPACT HEADER BAR */}
       <div className="w-full bg-[#07080e]/95 border-b border-white/[0.08] sticky top-0 z-40 px-4 sm:px-8 py-2.5 backdrop-blur-xl flex items-center justify-between">
-        <Link
-          to="/dreamgirls"
-          className="flex items-center gap-2 text-xs font-medium text-neutral-300 hover:text-white transition-colors group"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
-          <span>Back to Dreamgirls</span>
-        </Link>
+        {isPrivate ? (
+          <span className="text-xs font-medium text-neutral-500">
+            {persona.name}
+          </span>
+        ) : (
+          <Link
+            to="/dreamgirls"
+            className="flex items-center gap-2 text-xs font-medium text-neutral-300 hover:text-white transition-colors group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+            <span>Back to Dreamgirls</span>
+          </Link>
+        )}
 
         {/* Dynamic Status / Mode switch trigger */}
         <div className="flex items-center gap-2.5">
@@ -1000,8 +1016,8 @@ export default function PersonaDetail() {
         )}
       </AnimatePresence>
 
-      {/* FOOTER */}
-      <Footer />
+      {/* FOOTER — hidden in private mode: it links to the home page and the grid */}
+      {!isPrivate && <Footer />}
     </div>
   );
 }

@@ -83,6 +83,73 @@ export async function sendMessage(
 /** Alias kept for readability at call sites that build very long replies. */
 export const sendLongMessage = sendMessage;
 
+// ---------------------------------------------------------------------------
+// Inline keyboards (the private-mode toggle and link durations)
+// ---------------------------------------------------------------------------
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+}
+
+export type InlineKeyboard = InlineKeyboardButton[][];
+
+/**
+ * Message with inline buttons. Long text is still split, but the keyboard is
+ * only attached to the last chunk so a tap always maps to one message.
+ */
+export async function sendMessageWithKeyboard(
+  env: Env,
+  chatId: number,
+  text: string,
+  keyboard: InlineKeyboard
+): Promise<boolean> {
+  const chunks = splitForTelegram(text);
+  let ok = true;
+  for (let i = 0; i < chunks.length; i += 1) {
+    const isLast = i === chunks.length - 1;
+    const result = await callTelegram(env, "sendMessage", {
+      chat_id: chatId,
+      text: chunks[i],
+      disable_web_page_preview: true,
+      ...(isLast ? { reply_markup: { inline_keyboard: keyboard } } : {}),
+    });
+    if (!result) ok = false;
+  }
+  return ok;
+}
+
+/** Replace the text (and keyboard) of a message the bot sent earlier. */
+export async function editMessageText(
+  env: Env,
+  chatId: number,
+  messageId: number,
+  text: string,
+  keyboard?: InlineKeyboard
+): Promise<boolean> {
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    disable_web_page_preview: true,
+  };
+  if (keyboard) payload.reply_markup = { inline_keyboard: keyboard };
+  const result = await callTelegram(env, "editMessageText", payload);
+  return !!result;
+}
+
+/** Acknowledge a button tap so Telegram stops showing the spinner. */
+export async function answerCallbackQuery(
+  env: Env,
+  callbackQueryId: string,
+  text?: string
+): Promise<void> {
+  await callTelegram(env, "answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    ...(text ? { text, show_alert: false } : {}),
+  });
+}
+
 export interface TelegramFileInfo {
   file_id: string;
   file_path?: string;

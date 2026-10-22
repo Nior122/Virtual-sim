@@ -428,3 +428,117 @@ export async function getPersonaForChat(
   );
   return (rows[0] as Record<string, unknown>) || null;
 }
+
+// ---------------------------------------------------------------------------
+// Admin backend helpers (additive; the bot's queries are untouched)
+// ---------------------------------------------------------------------------
+/** Columns the admin editor may write. Anything else is ignored. */
+const ADMIN_UPDATABLE_COLUMNS = new Set([
+  "name", "slug", "description", "profileImage", "coverImage", "gallery",
+  "isAdult", "age", "city", "country", "occupation", "languages",
+  "shortBio", "longBio", "bodyType", "bustSize", "height", "eyeColor",
+  "hairColor", "tattoosAndPiercings", "turnOns", "turnOffs", "fantasies",
+  "intimacyStyle", "preferredVibe", "kinksAndFetishes", "favoriteLingerie",
+  "eroticInterests", "personality", "interests", "hobbies", "likes",
+  "dislikes", "background", "speakingStyle", "communicationTone",
+  "flirtLevel", "emojiFrequency", "systemPrompt", "active",
+]);
+
+export interface AdminPersonaRow {
+  id: string;
+  name: string;
+  slug: string;
+  profileImage: string | null;
+  coverImage: string | null;
+  gallery: string | null;
+  active: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+/** Profiles for the admin list (active and inactive, newest first). */
+export async function listAdminPersonaRows(env: Env): Promise<AdminPersonaRow[]> {
+  const sql = sqlFor(env);
+  return (await sql.query(
+    `SELECT "id", "name", "slug", "profileImage", "coverImage", "gallery",
+            "active", "createdAt", "updatedAt"
+       FROM "Persona"
+      ORDER BY "createdAt" DESC`
+  )) as AdminPersonaRow[];
+}
+
+/**
+ * One persona with every column, including `systemPrompt`.
+ * Only the admin API calls this — never a public route.
+ */
+export async function getPersonaForAdmin(
+  env: Env,
+  idOrSlug: string
+): Promise<Record<string, unknown> | null> {
+  if (!idOrSlug) return null;
+  const sql = sqlFor(env);
+  const columns = [...INSERT_COLUMNS].map((c) => `"${c}"`).join(", ");
+  const rows = await sql.query(
+    `SELECT ${columns}, "active", "createdAt", "updatedAt" FROM "Persona"
+      WHERE "id" = $1 OR lower("slug") = lower($1)
+      LIMIT 1`,
+    [idOrSlug]
+  );
+  return (rows[0] as Record<string, unknown>) || null;
+}
+
+/** Update any subset of the allow-listed columns. Returns false when unknown. */
+export async function updatePersonaRecord(
+  env: Env,
+  personaId: string,
+  updates: Record<string, unknown>
+): Promise<boolean> {
+  const entries = Object.entries(updates).filter(
+    ([key, value]) => ADMIN_UPDATABLE_COLUMNS.has(key) && value !== undefined
+  );
+  if (entries.length === 0) return false;
+  const sql = sqlFor(env);
+  const values: unknown[] = [personaId];
+  const sets = entries.map(([key, value]) => {
+    values.push(value);
+    return `"${key}" = $${values.length}`;
+  });
+  values.push(new Date().toISOString());
+  sets.push(`"updatedAt" = $${values.length}`);
+  const rows = await sql.query(
+    `UPDATE "Persona" SET ${sets.join(", ")} WHERE "id" = $1 RETURNING "id"`,
+    values
+  );
+  return rows.length > 0;
+}
+
+/** Deletes a persona; its videos cascade (ON DELETE CASCADE in the schema). */
+export async function deletePersonaRecord(
+  env: Env,
+  personaId: string
+): Promise<boolean> {
+  const sql = sqlFor(env);
+  // Explicit video cleanup keeps the behaviour correct even on a database
+  // where the foreign key was created without ON DELETE CASCADE.
+  await sql.query(`DELETE FROM "PersonaVideo" WHERE "personaId" = $1`, [personaId]);
+  const rows = await sql.query(
+    `DELETE FROM "Persona" WHERE "id" = $1 RETURNING "id"`,
+    [personaId]
+  );
+  return rows.length > 0;
+}
+
+/** All video rows of a persona, including deactivated ones. */
+export async function listPersonaVideosForAdmin(
+  env: Env,
+  personaId: string
+): Promise<Array<{ id: string; url: string; title: string; active: boolean }>> {
+  const sql = sqlFor(env);
+  return (await sql.query(
+    `SELECT "id", "url", "title", "active"
+       FROM "PersonaVideo"
+      WHERE "personaId" = $1
+      ORDER BY "createdAt" ASC`,
+    [personaId]
+  )) as Array<{ id: string; url: string; title: string; active: boolean }>;
+}

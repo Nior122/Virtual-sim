@@ -37,6 +37,18 @@ export interface Env {
   /** Public base URL of THIS Pages project (media + profile links).
    *  Falls back to the incoming request origin at runtime. */
   PUBLIC_BASE_URL?: string;
+  /** Password for the web backend at /admin. Unset = the backend is disabled. */
+  ADMIN_PASSWORD?: string;
+  /** How long an admin login lasts, in hours (default 12, max 168). */
+  ADMIN_SESSION_HOURS?: string;
+  /** Extra entropy for the session cookie signature (optional but advised). */
+  ADMIN_SESSION_SECRET?: string;
+  /**
+   * Telegram chat id of the site owner. Private mode, share links and the ad
+   * URL can only be changed from this chat — without it anyone who finds the
+   * bot could reopen the site. Send /id to the bot to read yours.
+   */
+  OWNER_CHAT_ID?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +93,20 @@ export interface TelegramMessage {
   media_group_id?: string;
 }
 
+export interface TelegramCallbackQuery {
+  id: string;
+  from?: { id: number; first_name?: string; username?: string };
+  /** The message that carried the inline keyboard (its chat is the target) */
+  message?: TelegramMessage;
+  data?: string;
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
+  /** Button tap from an inline keyboard */
+  callback_query?: TelegramCallbackQuery;
 }
 
 // ---------------------------------------------------------------------------
