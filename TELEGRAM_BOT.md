@@ -82,6 +82,10 @@ Owner-only site controls (see [Private mode](#private-mode-link-only-site)):
 
 ### Private mode (link-only site)
 
+> Prefer a browser? Everything in this section — plus profile editing, imports,
+> chat testing and diagnostics — is also available in the password-protected web
+> backend at `/admin`. See **[ADMIN_PANEL.md](ADMIN_PANEL.md)**.
+
 Turns the public site into "the profile in the link and nothing else".
 
 **What the visitor sees when it is ON**
@@ -333,6 +337,9 @@ Set in Pages → project → Settings → Environment variables (Production):
 | `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional any OpenAI-compatible gateway (`AI_*` aliases) |
 | `AI_PROVIDER_ORDER` | Optional attempt order, default `groq,openrouter,openai` |
 | `OWNER_CHAT_ID` | **Required for site controls.** Telegram chat id allowed to run `/private`, `/link`, `/sharelinks`, `/revoke`, `/adlink` |
+| `ADMIN_PASSWORD` | Optional. Password for the `/admin` web backend (min 6 chars). Unset = the backend is disabled. See [ADMIN_PANEL.md](ADMIN_PANEL.md) |
+| `ADMIN_SESSION_HOURS` | Optional. Admin login lifetime in hours (default 12, max 168) |
+| `ADMIN_SESSION_SECRET` | Optional. Extra signing entropy for the admin session cookie |
 
 > No model ID is hardcoded anywhere. A provider is skipped (and reported in
 > `/chatcheck`) when its key or its model variable is missing.

@@ -31,6 +31,8 @@ function PrivateRoutes() {
       <Route path="/dreamgirl/:slug" element={<PersonaDetail />} />
       <Route path="/persona/:slug" element={<PersonaDetail />} />
       <Route path="/call/:slug" element={<CallSession />} />
+      {/* The owner's backend has its own login and stays reachable. */}
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="*" element={<PrivateNotFound />} />
     </Routes>
   );

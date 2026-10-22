@@ -37,6 +37,12 @@ export interface Env {
   /** Public base URL of THIS Pages project (media + profile links).
    *  Falls back to the incoming request origin at runtime. */
   PUBLIC_BASE_URL?: string;
+  /** Password for the web backend at /admin. Unset = the backend is disabled. */
+  ADMIN_PASSWORD?: string;
+  /** How long an admin login lasts, in hours (default 12, max 168). */
+  ADMIN_SESSION_HOURS?: string;
+  /** Extra entropy for the session cookie signature (optional but advised). */
+  ADMIN_SESSION_SECRET?: string;
   /**
    * Telegram chat id of the site owner. Private mode, share links and the ad
    * URL can only be changed from this chat — without it anyone who finds the

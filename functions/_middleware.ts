@@ -68,6 +68,23 @@ function isPublicApi(path: string): boolean {
 }
 
 /**
+ * The owner's backend.
+ *
+ * It must stay reachable while private mode is ON — otherwise turning the site
+ * private would also lock the owner out of the page that turns it back off.
+ * Nothing is exposed by letting it through: every /api/admin route checks the
+ * signed session cookie itself, and the page is just a login form until then.
+ */
+function isAdminPath(path: string): boolean {
+  return (
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
+    path === "/api/admin" ||
+    path.startsWith("/api/admin/")
+  );
+}
+
+/**
  * Decode a path segment without throwing.
  * A malformed escape (`/dreamgirl/%E0%A4%A`) must answer 404, not a 500 with a
  * stack trace — and it must never be mistaken for a valid slug.
@@ -195,8 +212,10 @@ export async function onRequest(context: EventContext): Promise<Response> {
   if (share) return redeemShareLink(context, share[1], secure);
   if (path === "/s" || path.startsWith("/s/")) return notFound();
 
-  // 2) Assets and infrastructure endpoints are never gated.
-  if (isPublicAsset(path) || isPublicApi(path)) return context.next();
+  // 2) Assets, infrastructure and the owner's backend are never gated.
+  if (isPublicAsset(path) || isPublicApi(path) || isAdminPath(path)) {
+    return context.next();
+  }
 
   // 3) Public mode: the site behaves exactly as before.
   const mode = await readPrivateMode(env);

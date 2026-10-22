@@ -202,6 +202,9 @@ KV stores each chat's in-progress profile and the media allowlist.
    | `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional | any other OpenAI-compatible gateway; `AI_API_KEY`/`AI_MODEL`/`AI_BASE_URL` aliases work |
    | `AI_PROVIDER_ORDER` | Plaintext, optional | attempt order, default `groq,openrouter,openai` |
    | `OWNER_CHAT_ID` | Plaintext, optional | your Telegram chat id — unlocks `/private`, `/link`, `/sharelinks`, `/revoke`, `/adlink`, and locks the rest of the bot to that chat. Send `/id` to the bot to read it |
+   | `ADMIN_PASSWORD` | Secret, optional | password for the `/admin` web backend (at least 6 characters). Unset = backend disabled. See [ADMIN_PANEL.md](ADMIN_PANEL.md) |
+   | `ADMIN_SESSION_HOURS` | Plaintext, optional | admin login lifetime in hours (default 12, max 168) |
+   | `ADMIN_SESSION_SECRET` | Secret, optional | extra entropy for the signed admin session cookie |
 
    > **Model IDs are never hardcoded.** A provider is used only when **both**
    > its key and its model variable are set; otherwise it is skipped and

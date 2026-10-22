@@ -22,6 +22,7 @@ const FEATURES = [
   "verified-image-urls",
   "private-mode",
   "share-links",
+  "admin-backend",
 ];
 
 export async function onRequestGet(): Promise<Response> {
