@@ -189,6 +189,7 @@ tab. Set it once and forget it.
 | The switch says ON but the home page still loads | KV has about a minute of propagation, or `BOT_KV` is not bound | wait 60 s, refresh; if it persists, check the Deployment card |
 | "BOT_KV is not bound to this deployment" | the KV binding was removed or renamed | Settings → **Bindings** → add KV namespace with name `BOT_KV` → redeploy |
 | The profile list is empty or red | `DATABASE_URL` is missing/suspended | the public site would show the same problem; check Neon |
+| Opening a profile from the panel says "not available" | private mode is ON and you used a bare `/dreamgirl/…` URL | use **Preview** (or a `/s/…` link) — the gate only lets a share-link cookie through, not your `/admin` login |
 | Everything works, but `npm run dev` does not have `/admin` | the dev server is Express; the backend is a Pages Function | use `npm run build` then `npx wrangler pages dev dist` |
 
 ### Undoing it
@@ -294,7 +295,13 @@ badge. Search by name or slug.
 
 - **New profile** opens a blank editor.
 - **Edit** loads the profile with its text fields, images and videos.
-- **Copy link / Open** go to the public page.
+- **Copy link / Open** go to the public page — while private mode is **OFF**.
+  With private mode **ON** they become **Preview** and **Copy 1h link**, which
+  mint a temporary `/s/…` share link first (10 minutes for the preview, one hour
+  for the copy) and show the URL under the list. A bare `/dreamgirl/…` URL
+  answers 404 in private mode for everyone, the owner included, so linking to it
+  would only look like a broken profile. Longer lifetimes live on the Overview
+  tab.
 - **Delete** removes the persona and all of its video rows (asks first).
 
 ### The editor
@@ -329,7 +336,9 @@ The web version of `/scrape` → `/preview` → `/confirm`.
 3. Review the cards: thumbnails, image/video counts, skipped embeds, name, slug,
    description and personality. A failed page shows why and does not stop the
    others.
-4. **Create profile** per card, or **Create all ready**.
+4. **Create profile** per card, or **Create all ready**. The card then offers
+   the same **Preview / Copy 1h link** actions as the Profiles tab, so a profile
+   imported while private mode is ON can still be opened and shared.
 
 Notes:
 

@@ -1,15 +1,20 @@
-import { useState } from "react";
-import { CheckCircle2, ExternalLink, Link2, Loader2, Trash2, Wand2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Link2, Loader2, Trash2, Wand2 } from "lucide-react";
 import {
   commitImport,
+  getSite,
   prepareImport,
   type PreparedEntry,
 } from "../../lib/admin/client";
 import {
+  ProfileLinkActions,
+  SharedLinkNotice,
+  type SharedLink,
+} from "./ProfileLinkActions";
+import {
   Badge,
   Button,
   Card,
-  CopyButton,
   ErrorNote,
   Field,
   Notice,
@@ -37,6 +42,22 @@ export default function ImportPanel() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Imported profiles are opened the same way as the Profiles tab: a share
+  // link while the site is private, the plain URL when it is public.
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [shared, setShared] = useState<SharedLink | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getSite()
+      .then((site) => {
+        if (alive) setIsPrivate(site.private);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const patch = (id: number, changes: Partial<Item>) =>
     setItems((current) =>
@@ -165,6 +186,7 @@ export default function ImportPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {notice && <Notice kind="success">{notice}</Notice>}
+      <SharedLinkNotice shared={shared} onClose={() => setShared(null)} />
 
       {items.length === 0 ? (
         <Card>
@@ -203,18 +225,13 @@ export default function ImportPanel() {
                     </Button>
                   )}
                   {item.status === "preparing" && <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />}
-                  {item.status === "done" && item.result?.link && (
-                    <>
-                      <CopyButton value={item.result.link} label="Copy link" />
-                      <a
-                        href={`/dreamgirl/${item.result.slug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-neutral-300 hover:bg-white/5"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Open
-                      </a>
-                    </>
+                  {item.status === "done" && item.result?.slug && (
+                    <ProfileLinkActions
+                      slug={item.result.slug}
+                      isPrivate={isPrivate}
+                      onResult={setShared}
+                      onError={setError}
+                    />
                   )}
                   <button
                     type="button"

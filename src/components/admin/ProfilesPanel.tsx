@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  ExternalLink,
   ImageIcon,
   Pencil,
   Plus,
@@ -18,6 +17,7 @@ import {
   deleteProfile,
   formatDate,
   getProfile,
+  getSite,
   listProfiles,
   updateProfile,
   type ProfileDetail,
@@ -25,10 +25,14 @@ import {
   type ProfileVideo,
 } from "../../lib/admin/client";
 import {
+  ProfileLinkActions,
+  SharedLinkNotice,
+  type SharedLink,
+} from "./ProfileLinkActions";
+import {
   Badge,
   Button,
   Card,
-  CopyButton,
   ErrorNote,
   Field,
   Notice,
@@ -122,13 +126,17 @@ export default function ProfilesPanel() {
   const [saving, setSaving] = useState(false);
   const [showExtra, setShowExtra] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  /** Private mode decides whether "Open" needs a temporary share link. */
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [shared, setShared] = useState<SharedLink | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await listProfiles();
+      const [data, site] = await Promise.all([listProfiles(), getSite()]);
       setProfiles(data.profiles);
+      setIsPrivate(site.private);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -597,6 +605,15 @@ export default function ProfilesPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {notice && <Notice kind="success">{notice}</Notice>}
+      <SharedLinkNotice shared={shared} onClose={() => setShared(null)} />
+      {isPrivate && (
+        <Notice kind="warn">
+          Private mode is ON, so a plain <code>/dreamgirl/…</code> URL answers
+          404 — for you too. <strong>Preview</strong> opens the profile with a
+          10-minute link, and <strong>Copy 1h link</strong> creates one you can
+          send. Longer lifetimes are on the Overview tab.
+        </Notice>
+      )}
 
       {loading ? (
         <Card>
@@ -653,18 +670,12 @@ export default function ProfilesPanel() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <CopyButton
-                  value={`${window.location.origin}/dreamgirl/${profile.slug}`}
-                  label="Copy link"
+                <ProfileLinkActions
+                  slug={profile.slug}
+                  isPrivate={isPrivate}
+                  onResult={setShared}
+                  onError={setError}
                 />
-                <a
-                  href={`/dreamgirl/${profile.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] text-neutral-300 hover:bg-white/5"
-                >
-                  <ExternalLink className="w-3 h-3" /> Open
-                </a>
                 <button
                   type="button"
                   onClick={() => void openEditor(profile.id)}
