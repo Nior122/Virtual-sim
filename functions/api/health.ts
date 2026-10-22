@@ -20,6 +20,8 @@ const FEATURES = [
   "env-model-providers",
   "archive-api-scrape",
   "verified-image-urls",
+  "private-mode",
+  "share-links",
 ];
 
 export async function onRequestGet(): Promise<Response> {

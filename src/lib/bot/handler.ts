@@ -59,6 +59,15 @@ import {
   scrapeProfile,
 } from "./scrape";
 import {
+  adLinkCommand,
+  handlePrivateCallback,
+  idCommand,
+  linkCommand,
+  privateCommand,
+  revokeCommand,
+  shareLinksCommand,
+} from "./private-mode";
+import {
   addVideo,
   buildPersonaPayload,
   createPersona,
@@ -155,7 +164,16 @@ Any link you paste is scraped and merged into your draft automatically
 /setname <name> and /setslug <slug> — override the generated values
 /status — show what the draft currently contains
 /confirm — create the profile and attach all videos
-/cancel — discard the draft`;
+/cancel — discard the draft
+
+Site controls (owner chat only)
+/private — private mode ON/OFF: hide the home page, the browse grid and every
+  profile except the one in a share link (buttons in the message)
+/link <slug> [6h|3d] — temporary link to one profile; after it expires the
+  visitor is sent to your ad link
+/sharelinks — active links with time left · /revoke <token|slug|all>
+/adlink <url|off> — where expired links redirect
+/id — your Telegram chat id (for OWNER_CHAT_ID)`;
 
 // ---------------------------------------------------------------------------
 // Media extraction from incoming Telegram messages
@@ -746,6 +764,36 @@ async function handleCommand(
           ? `Added as video (playable):\n${link}`
           : `Added as video (embed page — I will resolve the real stream on /confirm):\n${link}`
       );
+      return;
+    }
+
+    case "/private": {
+      await privateCommand(env, origin, chatId, arg);
+      return;
+    }
+
+    case "/link": {
+      await linkCommand(env, origin, chatId, arg);
+      return;
+    }
+
+    case "/sharelinks": {
+      await shareLinksCommand(env, origin, chatId);
+      return;
+    }
+
+    case "/revoke": {
+      await revokeCommand(env, chatId, arg);
+      return;
+    }
+
+    case "/adlink": {
+      await adLinkCommand(env, chatId, arg);
+      return;
+    }
+
+    case "/id": {
+      await idCommand(env, chatId);
       return;
     }
 
@@ -2375,11 +2423,44 @@ export async function handleUpdate(
   update: TelegramUpdate,
   requestOrigin: string
 ): Promise<void> {
+  // Inline keyboard taps (private-mode toggle, link durations).
+  if (update.callback_query) {
+    await handlePrivateCallback(env, requestOrigin, update.callback_query);
+    return;
+  }
+
   const msg = update.message || update.edited_message;
   if (!msg || !msg.chat) return;
 
   const chatId = msg.chat.id;
   const text = (msg.text || msg.caption || "").trim();
+
+  /**
+   * Once OWNER_CHAT_ID is set the bot is a private control panel: any other
+   * chat is ignored. Without this, a stranger who guesses the bot username
+   * could run /profiles, /links or /chatcheck and read every profile — which
+   * would defeat private mode entirely. With OWNER_CHAT_ID unset the bot keeps
+   * its old behaviour (open to anyone who messages it).
+   *
+   * /id is still answered so the owner can discover the id to configure.
+   */
+  const ownerChat = (env.OWNER_CHAT_ID || "").trim();
+  if (ownerChat && String(chatId) !== ownerChat) {
+    if (/^\/id(@\w+)?$/i.test(text)) {
+      await sendMessage(
+        env,
+        chatId,
+        `Chat id: ${chatId}\nThis chat is not the owner chat, so the bot will not respond.`
+      );
+      return;
+    }
+    await sendMessage(
+      env,
+      chatId,
+      "This bot is private. Ask the owner for access."
+    );
+    return;
+  }
   if (text.startsWith("/")) {
     await handleCommand(env, requestOrigin, msg, text);
     return;

@@ -201,6 +201,7 @@ KV stores each chat's in-progress profile and the media allowlist.
    | `OPENROUTER_MODEL` | Plaintext, optional | the model ID exactly as OpenRouter lists it |
    | `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional | any other OpenAI-compatible gateway; `AI_API_KEY`/`AI_MODEL`/`AI_BASE_URL` aliases work |
    | `AI_PROVIDER_ORDER` | Plaintext, optional | attempt order, default `groq,openrouter,openai` |
+   | `OWNER_CHAT_ID` | Plaintext, optional | your Telegram chat id — unlocks `/private`, `/link`, `/sharelinks`, `/revoke`, `/adlink`, and locks the rest of the bot to that chat. Send `/id` to the bot to read it |
 
    > **Model IDs are never hardcoded.** A provider is used only when **both**
    > its key and its model variable are set; otherwise it is skipped and
@@ -370,6 +371,11 @@ In your Telegram bot chat:
 | Video shows a black frame / never starts | The call screen plays remote videos through `/api/video-proxy` and `/api/hls-proxy`; check Pages → Observability → Functions logs for a 4xx/5xx from those routes. Sources that never expose a real stream (login-walled players) cannot be resolved. |
 | `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |
 | `/scrape` misses an infinite-scroll gallery | A Worker can't scroll or run the page's JavaScript. Copy the individual page links and `/scrape` them one by one. |
+| `/private` says "Site controls are locked" | `OWNER_CHAT_ID` is not set. Send `/id` to the bot — it replies with your chat id — then add `OWNER_CHAT_ID=<that number>` to the Pages environment variables and redeploy. |
+| Private mode ON but the home page still loads | Pages caches the edge response for a moment: allow up to ~60 s (KV propagation). Also confirm `/api/health` lists `private-mode` — if it does not, the Functions were not redeployed. |
+| A shared link says the page is not available | The link expired, was revoked, or names a different slug than the profile being opened. Check `/sharelinks` for the remaining time, then send the customer a fresh `/link <slug> <duration>`. |
+| Shared profile opens but its images/videos 404 | The visitor's browser is not sending the access cookie (private window with cookies blocked, or a proxy stripping `Set-Cookie`). Ask them to open the original `/s/...` link again in a normal browser. |
+| Private mode blocks `/sitemap.xml` | Intentional: the sitemap lists every profile, which defeats private mode. It is served normally again as soon as private mode is OFF. |
 | Variable changes seem ignored | Variables load only on a fresh deploy: **Deployments → ⋯ → Retry deployment**. |
 | Only **Preview** deployments appear after a merge | The Pages project's *Production branch* is not `main`. Settings → Builds & deployments → Production branch → `main`, then retry the deployment. Part 6b automates this. |
 | Deploy workflow says "Skipping the Pages deploy — missing secret(s)" | Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` under Settings → Secrets and variables → Actions (Part 6b, step 2), then re-run the workflow. |

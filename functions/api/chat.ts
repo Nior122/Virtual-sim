@@ -1,5 +1,6 @@
 import { generatePersonaResponse } from "../../src/lib/ai/provider";
 import { getPersonaForChat } from "../../src/lib/db/neon";
+import { resolveRequestAccess } from "../../src/lib/access/mode";
 
 /**
  * Last-resort persona when the row cannot be loaded (missing DB binding, an
@@ -79,6 +80,29 @@ export async function onRequestPost({ request, env }: any) {
     const personaForPrompt = resolved
       ? normalizePersona(resolved)
       : persona || genericPersona(personaId);
+
+    // Private mode: chat only exists for the profile named by the visitor's
+    // share link. Anyone else gets no reply at all — not a generic one.
+    try {
+      const access = await resolveRequestAccess(env, request);
+      if (access.mode.enabled) {
+        const allowed = access.link ? access.link.slug.toLowerCase() : null;
+        const target = String(
+          (personaForPrompt as Record<string, any>)?.slug || ""
+        ).toLowerCase();
+        if (!allowed || !target || target !== allowed) {
+          return new Response(JSON.stringify({ error: "Not found" }), {
+            status: 404,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store",
+            },
+          });
+        }
+      }
+    } catch {
+      // A KV failure must not break chat for a legitimate visitor.
+    }
 
     const { content, provider } = await generatePersonaResponse({
       // @ts-ignore: DB row maps onto the Persona shape the prompt reads

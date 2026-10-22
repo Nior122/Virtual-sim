@@ -4,18 +4,85 @@
  */
 
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import LandingPage from "./components/LandingPage";
 import ExplorePersonas from "./components/ExplorePersonas";
 import PersonaDetail from "./components/PersonaDetail";
 import CallSession from "./components/CallSession";
 import AdminDashboard from "./components/AdminDashboard";
 import OnlinePopupToast from "./components/OnlinePopupToast";
+import PrivateNotFound from "./components/PrivateNotFound";
 import AuthModal from "./components/AuthModal";
 import UserSettingsModal from "./components/UserSettingsModal";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { useSiteMode } from "./hooks/useSiteMode";
 import { ShieldAlert } from "lucide-react";
+
+/**
+ * Only the shared profile is routable while private mode is ON.
+ * The server already 404s everything else — this keeps client-side navigation
+ * (the old Home / Explore buttons, a cached back entry) from rendering a page
+ * the server would refuse.
+ */
+function PrivateRoutes() {
+  return (
+    <Routes>
+      <Route path="/dreamgirl/:slug" element={<PersonaDetail />} />
+      <Route path="/persona/:slug" element={<PersonaDetail />} />
+      <Route path="/call/:slug" element={<CallSession />} />
+      <Route path="*" element={<PrivateNotFound />} />
+    </Routes>
+  );
+}
+
+function PublicRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+
+      {/* Primary Dreamgirls Routes */}
+      <Route path="/dreamgirls" element={<ExplorePersonas />} />
+      <Route path="/dreamgirl/:slug" element={<PersonaDetail />} />
+      <Route path="/call/:slug" element={<CallSession />} />
+      <Route path="/admin" element={<AdminDashboard />} />
+
+      {/* Legacy Redirects for backwards compatibility */}
+      <Route path="/personas" element={<Navigate to="/dreamgirls" replace />} />
+      <Route path="/explore" element={<Navigate to="/dreamgirls" replace />} />
+      <Route path="/persona/:slug" element={<PersonaDetail />} />
+    </Routes>
+  );
+}
+
+function AppShell() {
+  const { isPrivate, ready } = useSiteMode();
+  const { pathname } = useLocation();
+
+  /**
+   * The three profile routes render the same components in both modes, and the
+   * server only serves them to a visitor holding a share link — so a shared
+   * link never waits for the mode request. Every other route is only ever
+   * served while the site is public, so it waits for the flag instead of
+   * flashing the landing page before switching to 404.
+   */
+  const profileRoute = /^\/(?:dreamgirl|persona|call)\//.test(pathname);
+  if (!ready && !profileRoute) {
+    return <div className="min-h-screen bg-[#07080e]" />;
+  }
+  const showPrivate = profileRoute ? (ready ? isPrivate : true) : isPrivate;
+
+  return (
+    <>
+      {showPrivate ? <PrivateRoutes /> : <PublicRoutes />}
+
+      {/* The toast advertises random profiles — it has no place in private mode. */}
+      {ready && !isPrivate && <OnlinePopupToast />}
+      <AuthModal />
+      <UserSettingsModal />
+    </>
+  );
+}
 
 export default function App() {
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
@@ -100,24 +167,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <div className="min-h-screen bg-[#07080e] text-neutral-100 dark:bg-[#07080e] dark:text-neutral-100 font-sans selection:bg-pink-500/30">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            
-            {/* Primary Dreamgirls Routes */}
-            <Route path="/dreamgirls" element={<ExplorePersonas />} />
-            <Route path="/dreamgirl/:slug" element={<PersonaDetail />} />
-            <Route path="/call/:slug" element={<CallSession />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-
-            {/* Legacy Redirects for backwards compatibility */}
-            <Route path="/personas" element={<Navigate to="/dreamgirls" replace />} />
-            <Route path="/explore" element={<Navigate to="/dreamgirls" replace />} />
-            <Route path="/persona/:slug" element={<PersonaDetail />} />
-          </Routes>
-
-          <OnlinePopupToast />
-          <AuthModal />
-          <UserSettingsModal />
+          <AppShell />
 
           {/* Media Protection Security Notice Toast */}
           {securityNotice && (

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, FormEvent, ChangeEvent } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { usePrivateMode } from "../hooks/useSiteMode";
 import Hls from "hls.js";
 import { Persona, ChatMessage, CallState, CALL_CONFIG, PersonaVideo } from "../types";
 import { DEFAULT_PERSONAS } from "../data/defaultPersonas";
@@ -91,6 +92,12 @@ export default function CallSession() {
   
   const { slug } = useParams();
   const navigate = useNavigate();
+  /**
+   * Private mode: the home page, /dreamgirls and /personas do not exist for
+   * this visitor, so "Home" / "Back" return to this profile instead of a 404.
+   * The server enforces the same rule; this only keeps the buttons sane.
+   */
+  const isPrivate = usePrivateMode();
   const [searchParams] = useSearchParams();
   const isChatParam = searchParams.get("chat") === "true";
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -1499,6 +1506,12 @@ export default function CallSession() {
   const isLocalFull = activeFullView === "local";
   const isRemoteFull = activeFullView === "remote";
 
+  /** Where "Home" / "Back" should go (private mode has no public home). */
+  const ownProfilePath = `/dreamgirl/${persona?.slug || slug || ""}`;
+  const goHome = () => navigate(isPrivate ? ownProfilePath : "/");
+  const goExplore = () => navigate(isPrivate ? ownProfilePath : "/dreamgirls");
+  const goBrowse = () => navigate(isPrivate ? ownProfilePath : "/personas");
+
   return (
     <div className="h-screen w-full bg-black overflow-hidden relative select-none">
       {/* Main Call View Area (Fullscreen alone when !chatOpen, hidden when in Chat mode) */}
@@ -1510,7 +1523,7 @@ export default function CallSession() {
               <button
                 onClick={() => {
                   endCall();
-                  navigate("/");
+                  goHome();
                 }}
                 className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors border border-white/10 text-sm font-medium cursor-pointer"
               >
@@ -1677,7 +1690,7 @@ export default function CallSession() {
                     if (window.history.length > 1) {
                       navigate(-1);
                     } else {
-                      navigate("/dreamgirls");
+                      goExplore();
                     }
                   }}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors cursor-pointer"
@@ -1690,7 +1703,7 @@ export default function CallSession() {
                   type="button"
                   onClick={() => {
                     endCall();
-                    navigate("/dreamgirls");
+                    goExplore();
                   }}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors cursor-pointer"
                   title="Home / Explore Dreamgirls"
@@ -2037,7 +2050,7 @@ export default function CallSession() {
                   <button
                     onClick={() => {
                       endCall();
-                      navigate("/");
+                      goHome();
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors border border-white/10 text-sm font-medium cursor-pointer"
                   >
@@ -2128,7 +2141,7 @@ export default function CallSession() {
                 } else if (window.history.length > 1) {
                   navigate(-1);
                 } else {
-                  navigate("/personas");
+                  goBrowse();
                 }
               }}
               title={callState !== "ENDED" && callState !== "IDLE" ? "Back to Call" : "Go Back"}
@@ -2140,7 +2153,7 @@ export default function CallSession() {
             {/* Home Button */}
             <button
               type="button"
-              onClick={() => navigate("/personas")}
+              onClick={goBrowse}
               title="Home / Explore Personas"
               className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white border border-white/10 flex items-center justify-center transition-all shrink-0 cursor-pointer group"
             >

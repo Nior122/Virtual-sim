@@ -70,6 +70,76 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/health` in a browser: `https://<your-site>/api/health` lists the deployed
   features, so you can confirm the live site runs the latest code
 
+Owner-only site controls (see [Private mode](#private-mode-link-only-site)):
+
+- `/private` — status plus **ON / OFF** buttons for private mode
+- `/link <slug> [6h|3d]` — create a temporary link to one profile
+- `/sharelinks` — active links with the time left and open count
+- `/revoke <token|slug|all>` — kill links early
+- `/adlink <url|off>` — where expired links redirect
+- `/id` — the chat id, for setting `OWNER_CHAT_ID`
+
+
+### Private mode (link-only site)
+
+Turns the public site into "the profile in the link and nothing else".
+
+**What the visitor sees when it is ON**
+
+| Request | Result |
+|---|---|
+| `/dreamgirl/<slug>` from a valid share link | the full profile: photos, videos, chat |
+| `/call/<slug>` for that same profile | the call screen and chat work normally |
+| `/`, `/dreamgirls`, `/explore`, `/admin` | neutral **404** page, no links |
+| any other profile | neutral **404** — the slug is not disclosed either |
+| `/sitemap.xml` | **404** while private mode is ON (it lists every profile) |
+| `/s/<expired token>` | redirect to the ad URL set with `/adlink` |
+
+**Creating a link**
+
+```
+/link ava 6h     → valid for 6 hours
+/link ava 3d     → valid for 3 days (max 30 days)
+/link ava        → buttons: 2h · 6h · 12h · 24h · 3d · 7d
+```
+
+The bot answers with the URL `https://<your-site>/s/<token>` and its exact
+expiry time. The token is 24 characters of random data — it cannot be guessed
+or enumerated. Opening it sets an access cookie valid for exactly the
+remaining lifetime of the link and forwards to that profile.
+
+**Ending access**
+
+- `/revoke <token|slug|all>` deletes links immediately (the cookie stops
+  working on the next request).
+- When a link expires, the visitor is forwarded to the ad URL from
+  `/adlink https://…`. Without an ad URL they get a neutral "link expired"
+  page instead.
+- `/private` → **OFF** restores the normal public site instantly; links stay
+  valid but are no longer needed.
+
+**Notes**
+
+- Only the chat named by `OWNER_CHAT_ID` can use these commands. Without that
+  variable they stay locked (send `/id` to the bot to read your chat id).
+- **Setting `OWNER_CHAT_ID` also makes the whole bot owner-only.** Any other
+  chat gets "This bot is private" instead of `/profiles`, `/links` or
+  `/chatcheck` — otherwise a stranger could read every profile straight from
+  the bot and private mode would be pointless. `/id` is still answered so the
+  owner can set the variable. Leave `OWNER_CHAT_ID` empty to keep the bot open
+  to everyone (the site controls then stay locked).
+- KV is eventually consistent (about 60 seconds worldwide), so a toggle can
+  take up to a minute to apply at every edge location.
+- Private mode is enforced by `functions/_middleware.ts`, which runs before the
+  SPA is served. The client also hides the footer, the "back to dreamgirls"
+  link and the online pop-up, and renders a 404 for any other route.
+- It is a **Pages** feature. `npm run dev` (the Express server) does not run
+  Pages Functions, so local development always behaves like the public site.
+- The JavaScript bundle still contains the bundled default personas as
+  fallback data. The gate hides every route and every API that serves them,
+  but someone who downloads and inspects the bundle could read those built-in
+  sample records. Profiles stored in Neon are not in the bundle.
+
 
 ### Bulk generation
 
@@ -262,6 +332,7 @@ Set in Pages → project → Settings → Environment variables (Production):
 | `OPENROUTER_MODEL` | **Required for OpenRouter** — model ID from OpenRouter |
 | `OPENAI_API_KEY` + `OPENAI_MODEL` | Optional any OpenAI-compatible gateway (`AI_*` aliases) |
 | `AI_PROVIDER_ORDER` | Optional attempt order, default `groq,openrouter,openai` |
+| `OWNER_CHAT_ID` | **Required for site controls.** Telegram chat id allowed to run `/private`, `/link`, `/sharelinks`, `/revoke`, `/adlink` |
 
 > No model ID is hardcoded anywhere. A provider is skipped (and reported in
 > `/chatcheck`) when its key or its model variable is missing.
