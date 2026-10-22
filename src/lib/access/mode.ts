@@ -87,9 +87,18 @@ export async function writePrivateMode(
   env: Env,
   enabled: boolean
 ): Promise<PrivateModeState> {
-  const state: PrivateModeState = { enabled, updatedAt: Date.now() };
   const store = kv(env);
-  if (store) await store.put(MODE_KEY, JSON.stringify(state));
+  // Never pretend the switch worked. Without KV the flag cannot be stored, and
+  // a toggle that silently does nothing is how the owner ends up believing the
+  // site is private while it is still public.
+  if (!store) {
+    throw new Error(
+      "BOT_KV is not bound to this deployment, so private mode cannot be saved. " +
+        "Add the KV binding in Pages → Settings → Bindings (variable name BOT_KV)."
+    );
+  }
+  const state: PrivateModeState = { enabled, updatedAt: Date.now() };
+  await store.put(MODE_KEY, JSON.stringify(state));
   return state;
 }
 
@@ -118,13 +127,16 @@ export async function writeAdUrl(
     if (store) await store.delete(AD_KEY);
     return null;
   }
+  if (!store) {
+    throw new Error(
+      "BOT_KV is not bound to this deployment, so the ad link cannot be saved."
+    );
+  }
   const clean = url.trim();
   if (!/^https?:\/\/\S+$/i.test(clean)) {
     throw new Error("The ad link must start with http:// or https://");
   }
-  if (store) {
-    await store.put(AD_KEY, JSON.stringify({ url: clean, updatedAt: Date.now() }));
-  }
+  await store.put(AD_KEY, JSON.stringify({ url: clean, updatedAt: Date.now() }));
   return clean;
 }
 

@@ -5,6 +5,11 @@ database. No Replit, no other server. No command line is required except the
 optional git step in Part 2 — everything else is clicking through dashboards.
 Budget about 45 minutes for the first run.
 
+> **Already set up and just want the new private-mode / share-link / `/admin`
+> dashboard?** Skip to **[ADMIN_PANEL.md](ADMIN_PANEL.md) → "Start here — the
+> 15-minute setup"](ADMIN_PANEL.md#0-start-here--the-15-minute-setup-step-by-step)**.
+> It lists every click in order (merge → add a password → redeploy → log in).
+
 ---
 
 ## Part 1 — The big picture (2 minutes)

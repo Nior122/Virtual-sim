@@ -16,6 +16,192 @@ cookie itself.
 
 ---
 
+## 0. Start here — the 15-minute setup, step by step
+
+Nothing below needs a terminal, an account, or any code. You need two browser
+tabs: **GitHub** (your repository) and **Cloudflare** (your site's dashboard).
+Do the steps in this order — each one depends on the one before it.
+
+> Already comfortable with Cloudflare? The short version is: merge the pull
+> request, add `ADMIN_PASSWORD`, redeploy, open `/admin`. The long version
+> below explains what you should see at every step so you can tell whether it
+> worked.
+
+### Step 1 — Put the new code on your site (2 minutes)
+
+The code for private mode, share links and `/admin` lives on a branch, not on
+your live site yet.
+
+1. Open your repository on GitHub: **`Nior122/Virtual-sim`**.
+2. Click the **Pull requests** tab → the PR titled **"Private mode + expiring
+   share links + the /admin web backend"** (number **#10**).
+3. Scroll to the bottom, click the green **Merge pull request** button, then
+   **Confirm merge**.
+4. Wait ~2 minutes. Cloudflare rebuilds the site automatically.
+
+**You should see:** the PR page turns purple with "Merged", and Cloudflare's
+Deployments list (Step 2, point 2) shows a new build at the top with a green
+**Success** badge.
+
+> If your project's *Production branch* is not `main`, the merge only creates a
+> preview. Fix once: Cloudflare → Workers & Pages → **dreambabe** → **Settings**
+> → **Builds & deployments** → **Production branch** → `main`.
+>
+> If nothing deploys after five minutes, open Cloudflare → your project →
+> **Deployments**. No new row at all? The GitHub Action may have skipped the
+> deploy for missing `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets —
+> in that case the dashboard's own Git integration still deploys on merge, so
+> check whether a build is already running.
+
+### Step 2 — Give yourself a password (3 minutes)
+
+This is the only credential the backend has. Use something long that you do not
+use anywhere else — a passphrase like `copper-Lantern-42-jigsaw` is easy to type
+on a phone and hard to guess.
+
+1. Open **https://dash.cloudflare.com** and log in.
+2. Left sidebar → **Workers & Pages** → click your project **`dreambabe`**.
+3. Open the **Settings** tab → **Variables and Secrets**.
+   (Older dashboards call this **Environment variables**; both look the same.)
+4. Make sure you are editing **Production** (there is a dropdown; Preview is a
+   separate list).
+5. Click **Add** (or **Add variable**) three times and fill in:
+
+   | Name | Type | Value |
+   |---|---|---|
+   | `ADMIN_PASSWORD` | **Secret / Encrypt** | the password you chose (6+ characters) |
+   | `ADMIN_SESSION_HOURS` | Plain text | `12` — or `24`, or `168` for a week |
+   | `ADMIN_SESSION_SECRET` | **Secret / Encrypt** | any long random string, e.g. `k3Jx9pQ2mV7sL4nB8tR1wY6` |
+
+6. Click **Save** / **Deploy**.
+
+**You should see:** the three names listed under Production. The passwords are
+hidden behind dots — that is normal.
+
+> You do **not** need to add `BOT_KV`, `DATABASE_URL` or the Telegram variables
+> again. They already exist (the bot uses them). Leave them alone.
+
+### Step 3 — Redeploy so the variables take effect (2 minutes)
+
+Cloudflare reads variables when a deployment is created, not while it runs.
+Saving them is not enough.
+
+1. Still in your Pages project → **Deployments** tab.
+2. Find the top deployment → click the **⋯** (three dots) menu next to it →
+   **Retry deployment**.
+3. Wait for the badge to turn **Success**.
+
+**You should see:** a *new* row at the top of the Deployments list. If the old
+deployment is still at the top, the retry has not finished yet.
+
+### Step 4 — Check the deployment (1 minute)
+
+Open this in a browser:
+
+```
+https://dreambabe.pages.dev/api/health
+```
+
+**You should see** `"private-mode"`, `"share-links"` and `"admin-backend"` in
+the `features` list. If they are missing, the new code is not live yet — go
+back to Step 1 and check that the merge actually deployed.
+
+### Step 5 — Log in (1 minute)
+
+Open **`https://dreambabe.pages.dev/admin`**.
+
+- If it says **"Backend disabled"**, `ADMIN_PASSWORD` did not reach this
+  deployment → repeat Step 3.
+- Otherwise type the password from Step 2 and press **Sign in**.
+
+**You should see** five tabs: Overview, Profiles, Import, Chat test, Tools.
+
+### Step 6 — Check the boxes on the Overview tab (1 minute)
+
+Look at the **Deployment** card, bottom right. All four should have a green
+check:
+
+| Row | Green means |
+|---|---|
+| KV binding | `BOT_KV` is bound — private mode and links can be saved |
+| Database | `DATABASE_URL` works — profiles can be listed |
+| Telegram bot | the bot token exists |
+| Owner chat | `OWNER_CHAT_ID` is set (see Step 7) |
+
+Not all green? Fix the missing one first; the tabs that need it will not work
+without it.
+
+### Step 7 — Unlock the Telegram controls (2 minutes, if not done already)
+
+`/private`, `/link` and `/adlink` only answer the **owner's** chat.
+
+1. In Telegram, send `/id` to your bot.
+2. Copy the number it replies with.
+3. Cloudflare → your project → **Settings → Variables and Secrets** →
+   **Add** → name `OWNER_CHAT_ID`, type **Plain text**, value that number →
+   save → **Deployments → ⋯ → Retry deployment**.
+
+**Be aware:** setting `OWNER_CHAT_ID` makes the *whole* bot owner-only. Anyone
+else who messages it gets "This bot is private" instead of `/profiles` or
+`/links`. That is deliberate — otherwise a stranger could read every profile
+through the bot and private mode would be pointless. `/id` still answers, so
+you can never lock yourself out of finding your own number.
+
+### Step 8 — Your first real test (3 minutes)
+
+Do this in a **private/incognito window** so you are a stranger, not you.
+
+1. In `/admin` → **Overview → Share links**: pick a profile, pick **1 hour**,
+   press **Create**. Copy the `/s/…` URL.
+2. Paste it in the incognito window. **You should see** that profile with its
+   photos, videos and a working chat.
+3. Now switch **Private mode** ON in `/admin`.
+4. In the same incognito window:
+   - that profile link still opens ✓
+   - type the site's home address → **404** ✓
+   - type another profile's address → **404** ✓
+5. Switch **Private mode** OFF. The home page works again for everyone.
+
+If steps 2 and 4 worked, everything is wired correctly.
+
+### Step 9 — Hand a link to a customer
+
+1. `/admin` → **Overview → Share links** → pick the profile and the lifetime.
+2. Press **Copy** next to the new link and send it however you normally would.
+3. Watch the **opens** count on that row to see whether they used it.
+4. To cut access early, press **Revoke**. To cut everything, **Revoke every
+   link**.
+
+When a link runs out, the visitor is sent to the **ads URL** you set on the same
+tab. Set it once and forget it.
+
+---
+
+## Common beginner mistakes
+
+| What happened | Why | What to do |
+|---|---|---|
+| `/admin` shows "Backend disabled" | the variable was saved but no new deployment was made | Deployments → ⋯ → **Retry deployment** |
+| Login says "Backend disabled" but you *did* set a password | the password is shorter than 6 characters, or you edited **Preview** instead of **Production** | check the length and the environment dropdown |
+| "Wrong password", but you copied it correctly | the browser or password manager added a space | retype it; the server trims surrounding spaces |
+| "Too many wrong passwords" | 8 failures from your IP in 15 minutes | wait 15 minutes, then try once more |
+| `/api/health` does not list `admin-backend` | the merge deployed a preview, not production | make `main` the Production branch (Step 1 note) |
+| The switch says ON but the home page still loads | KV has about a minute of propagation, or `BOT_KV` is not bound | wait 60 s, refresh; if it persists, check the Deployment card |
+| "BOT_KV is not bound to this deployment" | the KV binding was removed or renamed | Settings → **Bindings** → add KV namespace with name `BOT_KV` → redeploy |
+| The profile list is empty or red | `DATABASE_URL` is missing/suspended | the public site would show the same problem; check Neon |
+| Everything works, but `npm run dev` does not have `/admin` | the dev server is Express; the backend is a Pages Function | use `npm run build` then `npx wrangler pages dev dist` |
+
+### Undoing it
+
+- **Make the site public again:** `/admin` → Overview → switch Private mode OFF.
+  The feature ships switched off, so a fresh deployment is public by default.
+- **Turn the backend off:** delete `ADMIN_PASSWORD` in Cloudflare and redeploy.
+  `/admin` then shows the setup card and every API answers 503. Nothing else on
+  the site changes.
+- **Kill every share link:** `/admin` → Overview → **Revoke every link**.
+
+---
+
 ## 1. Setup
 
 Add these in Cloudflare → Pages → your project → **Settings → Environment
@@ -94,6 +280,10 @@ sets the same value — the two always agree because both read the same KV key.
 
 Shows whether KV, the database, the Telegram bot and `OWNER_CHAT_ID` are
 configured, plus the AI provider order (never the keys).
+
+If `BOT_KV` is missing, switching private mode on answers
+**"BOT_KV is not bound to this deployment"** instead of pretending it worked —
+a switch that silently does nothing is worse than an error.
 
 ---
 

@@ -108,15 +108,22 @@ export async function siteState(env: Env, origin: string) {
 }
 
 export async function setPrivateMode(env: Env, enabled: boolean) {
-  const mode = await writePrivateMode(env, enabled);
-  return mode;
+  try {
+    return await writePrivateMode(env, enabled);
+  } catch (err) {
+    throw new AdminError(
+      (err as Error).message,
+      /BOT_KV/.test((err as Error).message) ? 503 : 500
+    );
+  }
 }
 
 export async function setAdUrl(env: Env, url: string | null) {
   try {
     return await writeAdUrl(env, url);
   } catch (err) {
-    throw new AdminError((err as Error).message, 400);
+    const message = (err as Error).message;
+    throw new AdminError(message, /BOT_KV/.test(message) ? 503 : 400);
   }
 }
 
