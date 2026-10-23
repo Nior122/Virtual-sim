@@ -25,6 +25,7 @@ import {
   type ProfileVideo,
 } from "../../lib/admin/client";
 import { ProfileLinkActions } from "./ProfileLinkActions";
+import { VideoThumb } from "./VideoThumb";
 import {
   Badge,
   Button,
@@ -448,7 +449,7 @@ export default function ProfilesPanel() {
             <Card>
               <SectionTitle
                 title="Videos"
-                subtitle="Playable streams for the call screen."
+                subtitle="Each row previews its own frame, so you can see which clip you are removing."
                 right={<Badge tone="neutral">{editor.videos.length}</Badge>}
               />
               <div className="space-y-2">
@@ -456,11 +457,16 @@ export default function ProfilesPanel() {
                   <p className="text-xs text-neutral-500">No videos yet.</p>
                 )}
                 {editor.videos.map((video, index) => (
-                  <div key={index} className="flex items-start gap-2">
-                    <div className="flex-1 space-y-2">
+                  <div
+                    key={index}
+                    className="flex items-start gap-2.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2"
+                  >
+                    <VideoThumb url={video.url} index={index} />
+                    <div className="min-w-0 flex-1 space-y-2">
                       <TextInput
                         value={video.url}
                         placeholder="https://…/video.mp4"
+                        aria-label={`Video ${index + 1} link`}
                         onChange={(event) =>
                           setEditor((current) => {
                             if (!current) return current;
@@ -473,6 +479,7 @@ export default function ProfilesPanel() {
                       <TextInput
                         value={video.title}
                         placeholder="Title (optional)"
+                        aria-label={`Video ${index + 1} title`}
                         onChange={(event) =>
                           setEditor((current) => {
                             if (!current) return current;
@@ -485,7 +492,8 @@ export default function ProfilesPanel() {
                     </div>
                     <button
                       type="button"
-                      title="Remove"
+                      title={`Remove video ${index + 1}`}
+                      aria-label={`Remove video ${index + 1}`}
                       onClick={() =>
                         setEditor((current) =>
                           current
@@ -493,9 +501,9 @@ export default function ProfilesPanel() {
                             : current
                         )
                       }
-                      className="mt-2 text-neutral-400 hover:text-red-300"
+                      className="mt-1 shrink-0 rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -515,7 +523,9 @@ export default function ProfilesPanel() {
               </Button>
               <p className="text-[11px] text-neutral-500 mt-2">
                 Embed links are resolved to a playable stream when you save. A link
-                with no playable stream is skipped and reported.
+                with no playable stream is skipped and reported. “No preview” means the
+                row could not be read yet — a dead link, or an embed with no direct
+                stream — not that the video will be dropped.
               </p>
             </Card>
 

@@ -323,9 +323,19 @@ badge. Search by name or slug.
   the offending URLs listed, so a card can never show a blank image.
 - **Profile copy** — description, personality, background, interests, speaking
   style, short/long bio and the smaller fields.
-- **Videos** — URL + optional title. Direct files (`.mp4`, `.webm`, `.m3u8`)
-  are stored as-is; embed players are resolved to a playable stream on save.
-  Links with no playable stream are skipped and reported.
+- **Videos** — one row per clip: a **thumbnail on the left, the link and title
+  on the right**, numbered in the order the call screen plays them. The
+  thumbnail is a real frame pulled from the video itself, so you can see which
+  clip you are about to remove instead of comparing bare URLs. It keeps the
+  clip's own shape — a portrait video gets a tall preview, a landscape video a
+  wide one — and shows a film icon plus “no preview” when a link cannot be
+  read (a dead URL, an embed with no direct stream, or a slow CDN). The frame
+  loads through the same proxy the call screen uses and only when the row is
+  near the screen, so opening a profile with 20 videos does not fetch 20
+  videos. Direct files (`.mp4`, `.webm`, `.m3u8`) are stored as-is; embed
+  players are resolved to a playable stream on save. Links with no playable
+  stream are skipped and reported. The trash button on the right removes just
+  that row; nothing is deleted until you save.
 - **Advanced** — body details, intimate fields and the **system prompt**. The
   prompt is never sent to a browser by any public endpoint.
 
