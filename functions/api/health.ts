@@ -24,6 +24,7 @@ const FEATURES = [
   "share-links",
   "admin-backend",
   "private-profile-urls",
+  "admin-video-thumbs",
 ];
 
 export async function onRequestGet(): Promise<Response> {
