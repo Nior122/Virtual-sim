@@ -9,13 +9,16 @@
 //
 // Behaviour:
 //   • private mode OFF → everything passes through untouched.
-//   • private mode ON  → only /dreamgirl/<slug>, /call/<slug> and
-//     /persona/<slug> for the slug named by a valid share cookie, plus its
-//     API calls, are served. Everything else (home, browse grid, other
-//     profiles, sitemap, admin) answers a neutral 404 with no links.
+//   • private mode ON  → the site has no catalogue and no discovery, but every
+//     profile is still reachable at its own URL. /dreamgirl/<slug>,
+//     /persona/<slug>, /call/<slug>, /api/personas/<slug>, chat and media are
+//     served to anyone who knows the link, so a visitor who is already on a
+//     profile keeps watching when the switch is flipped. The home page, the
+//     browse grid, /sitemap.xml and the persona *list* API answer a neutral
+//     404, so nobody can browse to another profile from the site.
 //   • /s/<token>       → redeems a share link: sets the access cookie and
 //     redirects to the profile. An expired link redirects to the owner's ad
-//     URL instead.
+//     URL instead (that is what the cookie is still good for).
 // ---------------------------------------------------------------------------
 import type { Env } from "../src/lib/bot/types";
 import {
@@ -84,19 +87,6 @@ function isAdminPath(path: string): boolean {
   );
 }
 
-/**
- * Decode a path segment without throwing.
- * A malformed escape (`/dreamgirl/%E0%A4%A`) must answer 404, not a 500 with a
- * stack trace — and it must never be mistaken for a valid slug.
- */
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return "";
-  }
-}
-
 function noStore(extra: Record<string, string> = {}): Record<string, string> {
   return {
     "Cache-Control": "no-store, max-age=0",
@@ -155,13 +145,6 @@ function apiNotFound(): Response {
   });
 }
 
-function apiForbidden(): Response {
-  return new Response(JSON.stringify({ error: "Forbidden" }), {
-    status: 403,
-    headers: noStore({ "Content-Type": "application/json" }),
-  });
-}
-
 function redirect(url: string, cookie?: string): Response {
   const headers = noStore({ Location: url });
   if (cookie) headers["Set-Cookie"] = cookie;
@@ -185,8 +168,9 @@ async function redeemShareLink(
 
   const now = Date.now();
   if (link.expiresAt <= now) {
+    // Drop the dead cookie on the way out, so the browser stops sending it.
     const adUrl = await readAdUrl(context.env);
-    if (adUrl) return redirect(adUrl);
+    if (adUrl) return redirect(adUrl, clearAccessCookie(secure));
     return neutralPage(410, "This link has expired.");
   }
 
@@ -221,13 +205,13 @@ export async function onRequest(context: EventContext): Promise<Response> {
   const mode = await readPrivateMode(env);
   if (!mode.enabled) return context.next();
 
-  // 4) Private mode.
+  // 4) Private mode: no catalogue, no discovery — but profiles stay open.
   const access = await resolveRequestAccess(env, request, mode);
-  const allowedSlug = access.link ? access.link.slug.toLowerCase() : null;
 
   /**
-   * Deny a request. With an expired cookie the visitor is forwarded to the ad
-   * URL, because they arrived through a real link that simply ran out.
+   * Deny a request for a hidden surface. With an expired share cookie the
+   * visitor is forwarded to the ad URL, because they arrived through a real
+   * link that simply ran out.
    */
   const deny = async (): Promise<Response> => {
     if (access.expired) {
@@ -239,19 +223,19 @@ export async function onRequest(context: EventContext): Promise<Response> {
 
   // --- API ---------------------------------------------------------------
   if (path.startsWith("/api/")) {
-    // The catalog powers the home page and the browse grid: never served.
+    // The catalogue powers the home page and the browse grid: never served.
+    // It is the one response that lists every profile.
     if (path === "/api/personas" || path === "/api/personas/") return apiNotFound();
 
-    const personaApi = path.match(PERSONA_API_RE);
-    if (personaApi) {
-      const slug = safeDecode(personaApi[1]).toLowerCase();
-      if (allowedSlug && slug === allowedSlug) return context.next();
-      return apiNotFound();
-    }
-
-    if (GATED_APIS.has(path) || path.startsWith("/api/media/")) {
-      if (access.link) return context.next();
-      return apiForbidden();
+    // A single profile, chat, video and media endpoints stay available: the
+    // profile a visitor is already watching must keep working when the switch
+    // is flipped, and a profile URL works in private mode by design.
+    if (
+      PERSONA_API_RE.test(path) ||
+      GATED_APIS.has(path) ||
+      path.startsWith("/api/media/")
+    ) {
+      return context.next();
     }
 
     // Everything else (admin, unknown routes) is invisible in private mode.
@@ -259,13 +243,10 @@ export async function onRequest(context: EventContext): Promise<Response> {
   }
 
   // --- Pages -------------------------------------------------------------
-  const page = path.match(PERSONA_PAGE_RE);
-  if (page) {
-    const slug = safeDecode(page[1]).toLowerCase();
-    if (allowedSlug && slug === allowedSlug) return context.next();
-    return deny();
-  }
+  // Profile pages are reachable at their own URL in both modes. Only the
+  // catalogue (home, browse grid, explore, sitemap, anything unknown) is
+  // hidden, so a visitor cannot discover another profile from the site.
+  if (PERSONA_PAGE_RE.test(path)) return context.next();
 
-  // Home, browse grid, admin, sitemap and anything unknown: hidden.
   return deny();
 }

@@ -8,6 +8,10 @@ import { useEffect, useState } from "react";
  * profiles — this hook exists so the UI never shows a link that would 404
  * (the home page, the browse grid, "back to dreamgirls", the online pop-up).
  *
+ * Profile pages are served in both modes, so this only controls the chrome
+ * (footer, "back to dreamgirls", the online pop-up) and which route table is
+ * mounted — never whether a profile can be loaded.
+ *
  * The answer is cached for the tab so a client-side navigation does not
  * refetch it, and every hook shares one in-flight request.
  */
