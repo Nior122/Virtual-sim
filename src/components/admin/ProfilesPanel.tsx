@@ -24,11 +24,7 @@ import {
   type ProfileSummary,
   type ProfileVideo,
 } from "../../lib/admin/client";
-import {
-  ProfileLinkActions,
-  SharedLinkNotice,
-  type SharedLink,
-} from "./ProfileLinkActions";
+import { ProfileLinkActions } from "./ProfileLinkActions";
 import {
   Badge,
   Button,
@@ -128,7 +124,6 @@ export default function ProfilesPanel() {
   const [deleting, setDeleting] = useState<string | null>(null);
   /** Private mode decides whether "Open" needs a temporary share link. */
   const [isPrivate, setIsPrivate] = useState(false);
-  const [shared, setShared] = useState<SharedLink | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -605,13 +600,11 @@ export default function ProfilesPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {notice && <Notice kind="success">{notice}</Notice>}
-      <SharedLinkNotice shared={shared} onClose={() => setShared(null)} />
       {isPrivate && (
-        <Notice kind="warn">
-          Private mode is ON, so a plain <code>/dreamgirl/…</code> URL answers
-          404 — for you too. <strong>Preview</strong> opens the profile with a
-          10-minute link, and <strong>Copy 1h link</strong> creates one you can
-          send. Longer lifetimes are on the Overview tab.
+        <Notice kind="info">
+          Private mode is ON. Profiles still open at their own URL — only the
+          home page, the browse grid and <code>/sitemap.xml</code> are hidden, so
+          nobody can browse from one profile to another.
         </Notice>
       )}
 
@@ -670,12 +663,7 @@ export default function ProfilesPanel() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <ProfileLinkActions
-                  slug={profile.slug}
-                  isPrivate={isPrivate}
-                  onResult={setShared}
-                  onError={setError}
-                />
+                <ProfileLinkActions slug={profile.slug} />
                 <button
                   type="button"
                   onClick={() => void openEditor(profile.id)}

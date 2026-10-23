@@ -23,6 +23,7 @@ const FEATURES = [
   "private-mode",
   "share-links",
   "admin-backend",
+  "private-profile-urls",
 ];
 
 export async function onRequestGet(): Promise<Response> {

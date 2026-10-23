@@ -121,9 +121,10 @@ function statusText(
     mode.enabled ? "🔒 Private mode is ON" : "🌐 Private mode is OFF",
     "",
     mode.enabled
-      ? "Only a visitor with an active share link can open that profile " +
-        "(photos, videos and chat all work). The home page, the browse grid and " +
-        "every other profile answer 404, and /sitemap.xml is not served."
+      ? "Profiles still open at their own URL (photos, videos and chat all " +
+        "work), so a visitor already on one stays there. The home page, the " +
+        "browse grid, the persona list and /sitemap.xml answer 404 — there is " +
+        "no way to browse from one profile to another."
       : "The site is public: home page, browse grid and every profile are visible.",
     "",
     `Active share links: ${links.length}`,
@@ -137,7 +138,8 @@ function statusText(
 
 function usageText(): string {
   return [
-    "Private mode makes the site link-only.",
+    "Private mode hides the catalogue: no home page, no browse grid, no", 
+    "sitemap — but every profile URL still works. Share links add a timer:",
     "",
     "/private — status, with ON/OFF buttons",
     "/link <slug> [duration] — temporary link, e.g. /link ava 6h or /link ava 3d",
@@ -145,8 +147,8 @@ function usageText(): string {
     "/revoke <token|slug|all> — kill links early",
     "/adlink <url> — where expired links redirect (/adlink off to clear)",
     "",
-    "While ON, a visitor can only open the profile in their link; everything",
-    "else on the site answers 404. Turning it OFF makes every profile public again.",
+    "While ON, only the catalogue is hidden; a visitor cannot browse to another",
+    "profile from the site. Turning it OFF brings the home page and grid back.",
   ].join("\n");
 }
 
@@ -165,13 +167,14 @@ function shareText(
       link.expiresAt
     )} (${formatRemaining(link.expiresAt)}).`,
     "",
-    "Whoever opens it sees that profile only: photos, videos and chat. " +
-      "Nothing else on the site is reachable from it.",
+    "Whoever opens it lands on that profile: photos, videos and chat. When the " +
+      "time is up the /s/ link sends visitors to your ad link instead (the " +
+      "profile page itself stays reachable at its own URL).",
     "",
     mode.enabled
-      ? "Private mode is ON, so the rest of the site is hidden right now."
-      : "⚠ Private mode is OFF right now, so the whole site is still public. " +
-        "Send /private and tap ON to hide everything else.",
+      ? "Private mode is ON, so the catalogue is hidden right now."
+      : "⚠ Private mode is OFF right now, so the home page and the browse " +
+        "grid are still public. Send /private and tap ON to hide them.",
   ].join("\n");
 }
 

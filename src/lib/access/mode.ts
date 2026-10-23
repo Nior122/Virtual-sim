@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // Private mode + expiring share links.
 //
-// Private mode turns the public site into "link only": the home page, the
-// browse grid and every profile except the one in the visitor's share link are
-// hidden. The state lives in KV so the Telegram bot can flip it and the Pages
-// Functions see the change on the next request.
+// Private mode removes the catalogue, not the profiles: the home page, the
+// browse grid, /sitemap.xml and the persona *list* API are hidden, while every
+// profile keeps working at its own URL (so a visitor who is already watching
+// one is not thrown out when the switch is flipped). The state lives in KV so
+// the Telegram bot can flip it and the Pages Functions see the change on the
+// next request.
 //
 // A share link is `https://<site>/s/<token>`:
 //   * valid   → sets a short-lived access cookie and redirects to the profile

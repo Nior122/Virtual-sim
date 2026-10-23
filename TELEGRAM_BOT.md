@@ -70,7 +70,7 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/health` in a browser: `https://<your-site>/api/health` lists the deployed
   features, so you can confirm the live site runs the latest code
 
-Owner-only site controls (see [Private mode](#private-mode-link-only-site)):
+Owner-only site controls (see [Private mode](#private-mode-no-home-page-no-browse-grid)):
 
 - `/private` — status plus **ON / OFF** buttons for private mode
 - `/link <slug> [6h|3d]` — create a temporary link to one profile
@@ -80,24 +80,31 @@ Owner-only site controls (see [Private mode](#private-mode-link-only-site)):
 - `/id` — the chat id, for setting `OWNER_CHAT_ID`
 
 
-### Private mode (link-only site)
+### Private mode (no home page, no browse grid)
 
 > Prefer a browser? Everything in this section — plus profile editing, imports,
 > chat testing and diagnostics — is also available in the password-protected web
 > backend at `/admin`. See **[ADMIN_PANEL.md](ADMIN_PANEL.md)**.
 
-Turns the public site into "the profile in the link and nothing else".
+Hides the catalogue, not the profiles. The site looks like a set of individual
+pages with no home page and no way to browse between them.
 
 **What the visitor sees when it is ON**
 
 | Request | Result |
 |---|---|
-| `/dreamgirl/<slug>` from a valid share link | the full profile: photos, videos, chat |
-| `/call/<slug>` for that same profile | the call screen and chat work normally |
-| `/`, `/dreamgirls`, `/explore`, `/admin` | neutral **404** page, no links |
-| any other profile | neutral **404** — the slug is not disclosed either |
+| `/dreamgirl/<slug>` | the full profile: photos, videos, chat — in **both** modes |
+| `/call/<slug>` | the call screen and chat work normally |
+| `/persona/<slug>`, `/api/personas/<slug>` | served |
+| `/`, `/dreamgirls`, `/explore`, `/personas` | neutral **404** page, no links |
+| `/api/personas` (the list) | **404** — the catalogue is never served |
 | `/sitemap.xml` | **404** while private mode is ON (it lists every profile) |
 | `/s/<expired token>` | redirect to the ad URL set with `/adlink` |
+
+A visitor who is already on a profile when you flip the switch **stays there**:
+the page and its data keep loading. What they lose is the home page, the browse
+grid and every in-page link to another profile (footer, "back to dreamgirls",
+the online pop-up).
 
 **Creating a link**
 

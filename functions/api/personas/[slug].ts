@@ -1,7 +1,7 @@
 import type { Env } from "../../../src/lib/bot/types";
 import { getPublicPersonaBySlug } from "../../../src/lib/db/neon";
 import { toPlaybackUrl } from "../../../src/lib/video/playback";
-import { resolveRequestAccess } from "../../../src/lib/access/mode";
+import { readPrivateMode } from "../../../src/lib/access/mode";
 
 /**
  * Single public persona with its videos, read directly from Neon.
@@ -25,27 +25,15 @@ export async function onRequestGet({
     });
   }
 
-  // Defence in depth: `_middleware.ts` already blocks this, but the endpoint
-  // refuses to hand out a profile to a visitor whose share link names another
-  // one. A missing/expired cookie simply means "no profile".
+  // Private mode does not restrict which profile can be read — every profile
+  // is reachable at its own URL — but its content must not sit in a shared
+  // cache while the site is in its "no catalogue" state.
   let privateMode = false;
   try {
-    const access = await resolveRequestAccess(env, request);
-    privateMode = access.mode.enabled;
-    if (privateMode) {
-      const allowed = access.link ? access.link.slug.toLowerCase() : null;
-      if (!allowed || allowed !== slug.toLowerCase()) {
-        return new Response(JSON.stringify({ error: "Persona not found" }), {
-          status: 404,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-          },
-        });
-      }
-    }
+    const mode = await readPrivateMode(env);
+    privateMode = mode.enabled;
   } catch {
-    // A KV failure falls through to the normal lookup below.
+    privateMode = false;
   }
 
   try {

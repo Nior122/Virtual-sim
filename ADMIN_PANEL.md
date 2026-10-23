@@ -151,18 +151,20 @@ you can never lock yourself out of finding your own number.
 
 Do this in a **private/incognito window** so you are a stranger, not you.
 
-1. In `/admin` → **Overview → Share links**: pick a profile, pick **1 hour**,
-   press **Create**. Copy the `/s/…` URL.
-2. Paste it in the incognito window. **You should see** that profile with its
-   photos, videos and a working chat.
-3. Now switch **Private mode** ON in `/admin`.
-4. In the same incognito window:
-   - that profile link still opens ✓
+1. Open a profile in the incognito window: `https://<your-site>/dreamgirl/<slug>`.
+   **You should see** its photos, videos and a working chat.
+2. Switch **Private mode** ON in `/admin`.
+3. In the same incognito window:
+   - **reload** the profile page → still opens ✓ (this is the "nobody gets
+     thrown out when I flip the switch" promise)
+   - its videos and chat still work ✓
    - type the site's home address → **404** ✓
-   - type another profile's address → **404** ✓
-5. Switch **Private mode** OFF. The home page works again for everyone.
+   - type `/dreamgirls` → **404** ✓
+   - type another profile's address → it opens (profiles are not secret; only
+     the catalogue is) ✓
+4. Switch **Private mode** OFF. The home page and the browse grid come back.
 
-If steps 2 and 4 worked, everything is wired correctly.
+If step 3 behaves like that, everything is wired correctly.
 
 ### Step 9 — Hand a link to a customer
 
@@ -189,7 +191,8 @@ tab. Set it once and forget it.
 | The switch says ON but the home page still loads | KV has about a minute of propagation, or `BOT_KV` is not bound | wait 60 s, refresh; if it persists, check the Deployment card |
 | "BOT_KV is not bound to this deployment" | the KV binding was removed or renamed | Settings → **Bindings** → add KV namespace with name `BOT_KV` → redeploy |
 | The profile list is empty or red | `DATABASE_URL` is missing/suspended | the public site would show the same problem; check Neon |
-| Opening a profile from the panel says "not available" | private mode is ON and you used a bare `/dreamgirl/…` URL | use **Preview** (or a `/s/…` link) — the gate only lets a share-link cookie through, not your `/admin` login |
+| A profile says "not available" while private mode is ON | the slug in the URL does not exist, or the profile is marked inactive | check the exact slug in Profiles; private mode no longer blocks profile URLs |
+| Someone sent a profile URL and the visitor says the site looks empty | private mode hides the home page and the browse grid | that is expected — the profile itself, its videos and its chat all work |
 | Everything works, but `npm run dev` does not have `/admin` | the dev server is Express; the backend is a Pages Function | use `npm run build` then `npx wrangler pages dev dist` |
 
 ### Undoing it
@@ -251,16 +254,19 @@ step — one owner, one password.
 
 ### Private mode
 
-The big switch at the top. ON:
+The big switch at the top. **It hides the catalogue, never the profiles.** ON:
 
-- `/`, `/dreamgirls`, `/explore`, `/admin` (for visitors), `/sitemap.xml` and
-  every profile except the one in a visitor's share link answer **404**.
-- The linked profile keeps working completely: photos, videos, `/call/<slug>`,
-  chat.
-- Any other profile also answers 404 — the visitor cannot discover it.
+- `/`, `/dreamgirls`, `/explore`, `/sitemap.xml` and the persona *list* API
+  answer **404** — there is nothing to browse.
+- Every profile keeps working at its own URL: `/dreamgirl/<slug>`,
+  `/call/<slug>`, photos, videos, chat. A visitor who is already watching one
+  when you flip the switch is **not** thrown out.
+- Nothing on a profile links to another profile (the footer, "back to
+  dreamgirls" and the pop-up are hidden), so a visitor can only reach another
+  profile if they already know its address.
 
-OFF restores the public site. KV propagation is about a minute, so one edge
-location may still serve the old state briefly.
+OFF restores the home page and the browse grid. KV propagation is about a
+minute, so one edge location may still serve the old state briefly.
 
 ### Share links
 
@@ -271,6 +277,11 @@ cookie is refused); **Revoke every link** does all of them.
 
 Expired or revoked links send the visitor to the **ads URL** below. If no ads
 URL is set they see a neutral "link expired" page instead.
+
+A share link is a **timed entry point**, not a lock: the profile page itself
+stays reachable at `/dreamgirl/<slug>` in either mode. What expires is the
+`/s/…` URL — after that it becomes the ad redirect, and the opens counter tells
+you how many people came through it.
 
 ### Expired-link destination
 
@@ -295,13 +306,10 @@ badge. Search by name or slug.
 
 - **New profile** opens a blank editor.
 - **Edit** loads the profile with its text fields, images and videos.
-- **Copy link / Open** go to the public page — while private mode is **OFF**.
-  With private mode **ON** they become **Preview** and **Copy 1h link**, which
-  mint a temporary `/s/…` share link first (10 minutes for the preview, one hour
-  for the copy) and show the URL under the list. A bare `/dreamgirl/…` URL
-  answers 404 in private mode for everyone, the owner included, so linking to it
-  would only look like a broken profile. Longer lifetimes live on the Overview
-  tab.
+- **Copy link / Open** go to the public page. They work in both modes: private
+  mode hides the catalogue, not the profiles. A short banner reminds you when
+  private mode is ON. Temporary `/s/…` links (with the timer and the ad
+  redirect) live on the Overview tab.
 - **Delete** removes the persona and all of its video rows (asks first).
 
 ### The editor
@@ -337,8 +345,8 @@ The web version of `/scrape` → `/preview` → `/confirm`.
    description and personality. A failed page shows why and does not stop the
    others.
 4. **Create profile** per card, or **Create all ready**. The card then offers
-   the same **Preview / Copy 1h link** actions as the Profiles tab, so a profile
-   imported while private mode is ON can still be opened and shared.
+   the same **Copy link / Open** actions as the Profiles tab — the profile URL
+   works in both modes.
 
 Notes:
 
