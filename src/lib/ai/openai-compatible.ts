@@ -145,6 +145,13 @@ export function sanitizeSecret(raw: string | undefined | null): string | undefin
  */
 export function fingerprintSecret(secret: string | undefined): string {
   if (!secret) return "not set";
+  // A real key is long and made of base64url-ish characters. Anything else is
+  // a mistake in the variable, so do not echo most of it back: a 15-character
+  // value would be shown almost in full, and the report is pasted into chats.
+  const keyish = /^[A-Za-z0-9_-]{20,}$/.test(secret);
+  if (!keyish) {
+    return `"${secret.slice(0, 12)}${secret.length > 12 ? "…" : ""}" (${secret.length} chars — not a key)`;
+  }
   const head = secret.slice(0, secret.startsWith("sk-or-") ? 13 : 8);
   const tail = secret.length > head.length + 4 ? secret.slice(-4) : "";
   return `${head}${tail ? `…${tail}` : ""} (${secret.length} chars)`;
@@ -157,6 +164,39 @@ export function looksLikeOtherProviderKey(id: string, secret: string): string | 
   return id === "openrouter"
     ? "this looks like a Groq key (gsk_…), not an OpenRouter key (sk-or-…)"
     : "this looks like an OpenRouter key (sk-or-…), not a key for this provider";
+}
+
+/** What a real key from each provider starts with (none = any format). */
+const KEY_PREFIX: Record<string, { prefix: string; sample: string; alias: string }> = {
+  groq: { prefix: "gsk_", sample: "gsk_…", alias: "Groq" },
+  openrouter: { prefix: "sk-or-", sample: "sk-or-v1-…", alias: "OpenRouter" },
+};
+
+/**
+ * Catch a value that cannot possibly be a key before spending a request on it.
+ *
+ * The common mistake is pasting the wrong thing into the key field — most often
+ * the model name (`openrouter/free`), a URL, or the whole `Bearer …` line. Those
+ * all produce the same unhelpful "401 Missing Authentication header", so they
+ * are detected here and reported as a configuration error instead.
+ */
+export function keyShapeProblem(
+  id: string,
+  apiKey: string,
+  model?: string
+): string | null {
+  const expected = KEY_PREFIX[id];
+  const what = expected ? `${expected.alias} keys` : "API keys";
+  if (model && apiKey === model) {
+    return `it holds the model name (“${apiKey}”), not an API key — ${what} start with ${expected?.sample ?? "a long token"}`;
+  }
+  if (/^https?:\/\//i.test(apiKey)) {
+    return "it holds a URL, not an API key";
+  }
+  if (expected && !apiKey.startsWith(expected.prefix)) {
+    return `${expected.alias} keys start with ${expected.sample}, so “${apiKey}” cannot be one`;
+  }
+  return null;
 }
 
 /** Env variable names per provider, including the generic aliases. */
@@ -219,6 +259,14 @@ export function resolveProviders(env: EnvLike): ProviderRegistry {
         label: LABELS[id],
         reason: `${names.model[0]} is not set (model IDs come from the environment only)`,
       });
+      continue;
+    }
+
+    // A value that cannot be a key would only ever fail with a generic 401.
+    // Report it as the configuration mistake it is, and do not send it.
+    const shapeProblem = keyShapeProblem(id, apiKey, model);
+    if (shapeProblem) {
+      skipped.push({ id, label: LABELS[id], reason: `${names.key[0]} is wrong: ${shapeProblem}` });
       continue;
     }
 

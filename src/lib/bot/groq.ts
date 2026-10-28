@@ -255,7 +255,7 @@ export async function generatePersonaDraft(
       "No AI provider configured for profile writing. " +
         skipped.map((entry) => `${entry.label}: ${entry.reason}`).join("; ") +
         ". Set the API key and the model variable (e.g. GROQ_API_KEY + GROQ_MODEL) " +
-        "in the Pages environment variables."
+        "in the Pages environment variables, then run /aicheck to test them."
     );
   }
 

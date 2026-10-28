@@ -313,6 +313,7 @@ Common verdicts:
 
 | The provider says | What it means |
 |---|---|
+| "`…_API_KEY` is wrong: it holds the model name …" | The model id was pasted into the key variable. Put the key in `…_API_KEY` and the model id in `…_MODEL` |
 | `401 Missing Authentication header` | The key arrived without a usable `Bearer` token — quotes, spaces, a newline or a pasted `Bearer ` in the variable. The bot strips all of those on read; if it still fails, delete and re-paste the variable |
 | `401 User not found` / `invalid api key` | The key really is dead (deleted, revoked or from another account). Create a new one |
 | `402` | The account is out of credits |

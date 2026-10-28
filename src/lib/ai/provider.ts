@@ -244,7 +244,17 @@ export async function aiReport(env: EnvLike): Promise<string> {
   const lines: string[] = ["AI providers (read from the environment only)", ""];
   probes.forEach((probe, index) => {
     if (probe.skipped) {
-      lines.push(`${index + 1}. ${probe.label} — not configured`, `   ${probe.skipped}`, "");
+      // "the variable is empty" and "the variable holds the wrong thing" are
+      // very different mistakes: the second one needs a value replaced, not added.
+      const misconfigured = / is wrong: /.test(probe.skipped);
+      lines.push(
+        `${index + 1}. ${probe.label} — ${misconfigured ? "❌ misconfigured" : "not configured"}`,
+        `   ${probe.skipped}`,
+        misconfigured
+          ? "   → Replace that variable with a real key from the provider, or delete it."
+          : "",
+        ""
+      );
       return;
     }
     const role = probes.filter((entry) => !entry.skipped)[0] === probe ? "primary" : "fallback";
@@ -265,10 +275,14 @@ export async function aiReport(env: EnvLike): Promise<string> {
   });
 
   const working = probes.filter((probe) => probe.ok);
+  const misconfigured = probes.filter((probe) => probe.skipped && / is wrong: /.test(probe.skipped));
   lines.push(
     working.length > 0
       ? "The first working provider is the one that writes your profiles."
-      : "None of the providers accepted the request — /preview will fail until one does."
+      : "None of the providers accepted the request — /preview will fail until one does.",
+    ...(misconfigured.length > 0 && working.length > 0
+      ? ["Profiles still write fine; the broken key just cannot act as a fallback."]
+      : [])
   );
   return lines.join("\n").trim();
 }
