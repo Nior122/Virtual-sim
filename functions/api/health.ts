@@ -6,6 +6,8 @@
  * actually running the latest code (a project whose Production branch is not
  * `main` keeps serving old Functions while GitHub shows the merge as done).
  */
+import { configureManagerTelegram, managerHandle } from "../../src/lib/manager";
+
 const FEATURES = [
   "bulk-preview-confirm",
   "jpeg-magic-byte-probe",
@@ -29,15 +31,20 @@ const FEATURES = [
   "ai-key-diagnostics",
   "bulk-video-remove",
   "preview-media-buttons",
+  "manager-handle-config",
 ];
 
-export async function onRequestGet(): Promise<Response> {
+export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
+  // `managerTelegram` below is the handle this deployment will actually use
+  // (MANAGER_TELEGRAM when set, otherwise the default in src/lib/manager.ts).
+  configureManagerTelegram(env);
   return new Response(
     JSON.stringify(
       {
         ok: true,
         service: "telegram-bot",
         features: FEATURES,
+        managerTelegram: managerHandle(),
         deployedAt: new Date().toISOString(),
       },
       null,

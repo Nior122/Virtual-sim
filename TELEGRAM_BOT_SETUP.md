@@ -210,6 +210,7 @@ KV stores each chat's in-progress profile and the media allowlist.
    | `ADMIN_PASSWORD` | Secret, optional | password for the `/admin` web backend (at least 6 characters). Unset = backend disabled. See [ADMIN_PANEL.md](ADMIN_PANEL.md) |
    | `ADMIN_SESSION_HOURS` | Plaintext, optional | admin login lifetime in hours (default 12, max 168) |
    | `ADMIN_SESSION_SECRET` | Secret, optional | extra entropy for the signed admin session cookie |
+   | `MANAGER_TELEGRAM` | Plaintext, optional | the manager's Telegram handle that replies and the chat CTA send guests to, e.g. `KasiQueenbot`. Unset = the default in `src/lib/manager.ts`. `/api/health` shows which handle the deployment is using |
 
    > **Model IDs are never hardcoded.** A provider is used only when **both**
    > its key and its model variable are set; otherwise it is skipped and
@@ -387,6 +388,7 @@ In your Telegram bot chat:
 | Confirmation link does nothing when tapped | `PUBLIC_BASE_URL` must include `https://`. The bot now adds the scheme automatically if it is missing — set the variable to `https://<project>.pages.dev` and redeploy. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
 | `/save` removed videos I wanted | `/save` deletes video rows you removed with `/remove`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
+| Manager link points at the wrong Telegram account | The handle lives in one place: `src/lib/manager.ts` (`DEFAULT_MANAGER_HANDLE`) — or set `MANAGER_TELEGRAM` on the Pages project and redeploy, which needs no code change. `https://<site>/api/health` reports `managerTelegram`, so you can confirm what the deployment is actually using. Old chat messages keep the link they were sent with. |
 | `/preview` buttons do nothing | The draft was created, cancelled or replaced, so the reply says "That draft is gone — start with /newprofile". Send `/newprofile`, add the media and run `/preview` again. If the tap says "Only the owner can use these buttons", the chat id does not match `OWNER_CHAT_ID` — `/id` shows the id the bot sees. |
 | Deleted the wrong photo in the preview | `↩️ Undo last removal` on the preview, or send `/restore`. Both walk back one deletion at a time and work for `/remove` too. |
 | `/remove 1-7` says "There is no #7" | The draft has fewer videos than the range asks for. The reply names the real count (`this draft has 5 videos (1-5)`) and **removes nothing** — send a list inside that range. After every `/remove` the bot renumbers what is left, so the next command is typed against the new list. |

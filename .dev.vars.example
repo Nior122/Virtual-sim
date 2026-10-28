@@ -35,6 +35,11 @@ OPENROUTER_MODEL=""
 # Neon PostgreSQL connection string (Neon dashboard -> Connection string)
 DATABASE_URL="postgresql://user:password@ep-xxxx-pooler.aws.neon.tech/neondb?sslmode=require"
 
+# The manager's Telegram handle guests are sent to. Optional: unset means the
+# default in src/lib/manager.ts, which is the only place the handle lives.
+# Accepts "KasiQueenbot", "@KasiQueenbot" or a full https://t.me/... URL.
+# MANAGER_TELEGRAM="KasiQueenbot"
+
 # Public URL of THIS Pages project (media + profile link host).
 # Leave empty in local dev to fall back to the incoming request origin.
 PUBLIC_BASE_URL=""

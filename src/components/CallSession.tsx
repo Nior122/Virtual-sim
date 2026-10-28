@@ -68,6 +68,15 @@ import {
 import { evaluateMiniTaskAgent, getRandomMissedOrRejectedCallMessage } from "../utils/taskAgent";
 import { fetchCallAccess, postConnectedCall, type CallAccessState } from "../lib/calls/client";
 import { toPlaybackUrl } from "../lib/video/playback";
+import {
+  findManagerLink,
+  hasManagerLink,
+  managerHandle,
+  managerLinkText,
+  managerLinkUrl,
+  setManagerTelegram,
+  splitManagerLinks,
+} from "../lib/manager";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { CallBlockedScreen } from "./CallBlockedScreen";
 
@@ -1466,6 +1475,9 @@ export default function CallSession() {
           if (!res.ok) throw new Error("API Error");
 
           const data = await res.json();
+          // The handle comes from the deployment (MANAGER_TELEGRAM), not from a
+          // hardcoded string in the bundle.
+          if (data.managerTelegram) setManagerTelegram(data.managerTelegram);
 
           let finalContent = sanitizeHumanChatOutput(data.message, persona.name, newMsg.content);
           // 1. Task: Call User
@@ -1476,13 +1488,13 @@ export default function CallSession() {
           }
           // 2. Adult pictures / nudes request: Send profile image with the specific rejection message & manager link
           else if (isAdultPicReq) {
-            if (!finalContent || !/t\.me\/KasiQueenbot/i.test(finalContent) || !/(only this type|contact my manager)/i.test(finalContent)) {
+            if (!finalContent || !hasManagerLink(finalContent) || !/(only this type|contact my manager)/i.test(finalContent)) {
               finalContent = getAdultPictureManagerRejectionMessage(persona.name, newMsg.content);
             }
           }
           // 3. Manager direct inquiry
           else if (isManagerReq) {
-            if (!finalContent || !/t\.me\/KasiQueenbot/i.test(finalContent)) {
+            if (!finalContent || !hasManagerLink(finalContent)) {
               finalContent = getManagerTelegramMessage(persona.name, newMsg.content);
             }
           }
@@ -1502,10 +1514,10 @@ export default function CallSession() {
               finalContent = isDateReq
                 ? getMeetUpOrDateManagerTelegramMessage(persona.name, newMsg.content)
                 : getSocialMediaManagerTelegramMessage(persona.name, newMsg.content);
-            } else if (!/t\.me\/KasiQueenbot/i.test(finalContent)) {
+            } else if (!hasManagerLink(finalContent)) {
               finalContent = isDateReq
-                ? `${finalContent.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/KasiQueenbot 😉`
-                : `${finalContent.trim()} Reach out to my manager on Telegram with this link: t.me/KasiQueenbot 😉`;
+                ? `${finalContent.trim()} Reach out to my manager on Telegram to arrange our meetup: ${managerLinkText()} 😉`
+                : `${finalContent.trim()} Reach out to my manager on Telegram with this link: ${managerLinkText()} 😉`;
             }
           } else if (hasReachedPhotoLimit && !/profile/i.test(finalContent)) {
             finalContent = PHOTO_LIMIT_EXCEEDED_MESSAGES[Math.floor(Math.random() * PHOTO_LIMIT_EXCEEDED_MESSAGES.length)];
@@ -2614,44 +2626,48 @@ export default function CallSession() {
                     {m.content && (
                       <div>
                         {(() => {
-                          if (/t\.me\/KasiQueenbot/i.test(m.content)) {
-                            const parts = m.content.split(/(t\.me\/KasiQueenbot)/gi);
-                            return (
-                              <span>
-                                {parts.map((part, idx) =>
-                                  /t\.me\/KasiQueenbot/i.test(part) ? (
-                                    <a
-                                      key={idx}
-                                      href="https://t.me/KasiQueenbot"
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="underline font-bold text-sky-300 hover:text-sky-200 transition-colors"
-                                    >
-                                      {part}
-                                    </a>
-                                  ) : (
-                                    <span key={idx}>{part}</span>
-                                  )
-                                )}
-                              </span>
-                            );
-                          }
-                          return m.content;
+                          // Link whichever t.me/… the reply actually contains, so an
+                          // older message still points somewhere useful.
+                          const segments = splitManagerLinks(m.content);
+                          if (!segments.some((segment) => segment.link)) return m.content;
+                          return (
+                            <span>
+                              {segments.map((segment, idx) =>
+                                segment.link ? (
+                                  <a
+                                    key={idx}
+                                    href={segment.link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline font-bold text-sky-300 hover:text-sky-200 transition-colors"
+                                  >
+                                    {segment.text}
+                                  </a>
+                                ) : (
+                                  <span key={idx}>{segment.text}</span>
+                                )
+                              )}
+                            </span>
+                          );
                         })()}
                       </div>
                     )}
 
                     {/* Quick-action button if message contains manager telegram link */}
-                    {m.role === "assistant" && /t\.me\/KasiQueenbot/i.test(m.content) && (
+                    {m.role === "assistant" && !!findManagerLink(m.content) && (
                       <a
-                        href="https://t.me/KasiQueenbot"
+                        href={findManagerLink(m.content)?.url || managerLinkUrl()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mt-2.5 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-200 text-[11px] font-medium transition-all shadow-sm group/btn cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5 truncate">
                           <Send className="w-3.5 h-3.5 text-sky-400 group-hover/btn:scale-110 transition-transform shrink-0" />
-                          <span className="truncate font-semibold">Contact Manager on Telegram (@KasiQueenbot)</span>
+                          <span className="truncate font-semibold">
+                            {`Contact Manager on Telegram (@${
+                              findManagerLink(m.content)?.handle || managerHandle()
+                            })`}
+                          </span>
                         </span>
                         <ArrowRight className="w-3.5 h-3.5 text-sky-400/80 group-hover/btn:translate-x-0.5 transition-transform shrink-0" />
                       </a>

@@ -49,6 +49,12 @@ export interface Env {
    * bot could reopen the site. Send /id to the bot to read yours.
    */
   OWNER_CHAT_ID?: string;
+  /**
+   * The manager's Telegram handle guests are sent to, e.g. `KasiQueenbot` or
+   * `@KasiQueenbot`. Unset = the default in src/lib/manager.ts, which is the
+   * only place the handle is written down.
+   */
+  MANAGER_TELEGRAM?: string;
 }
 
 // ---------------------------------------------------------------------------

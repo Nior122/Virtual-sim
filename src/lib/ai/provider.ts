@@ -1,5 +1,6 @@
 import { Persona, ChatMessage } from "../../types";
 import { buildPersonaContext } from "./persona-context";
+import { managerLinkText } from "../manager";
 import {
   describeProvider,
   probeProviders,
@@ -42,7 +43,7 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
       text
     )
   ) {
-    return `Mmm you'll have to reach out to my manager on Telegram for that: t.me/KasiQueenbot 😉✨`;
+    return `Mmm you'll have to reach out to my manager on Telegram for that: ${managerLinkText()} 😉✨`;
   }
 
   // Are you a bot / Prove it / Call (kept exactly as before)
