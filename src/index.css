@@ -1,4 +1,13 @@
 @import "tailwindcss";
+@import "./styles/light-theme.css";
+
+/*
+ * The theme switch is a class on <html> (`dark` / `light`), set by
+ * ThemeProvider and by the boot script in index.html. Tailwind v4 has no
+ * `light` variant of its own, so one is declared here: `light:bg-white` works
+ * and only applies while the light theme is active.
+ */
+@custom-variant light (&:where(html.light, html.light *));
 
 @layer base {
   :root {
@@ -10,20 +19,22 @@
 
   html.light,
   [data-theme="light"] {
-    --bg-primary: #f8fafc;
-    --text-primary: #0f172a;
+    --bg-primary: #f5f6fa;
+    --text-primary: #0b1220;
   }
 
   body {
     font-family: var(--font-sans);
     background-color: var(--bg-primary);
     color: var(--text-primary);
+    /* The theme is applied before first paint (see index.html), so this only
+       animates explicit switches — never the initial render. */
+    transition: background-color 0.25s ease, color 0.25s ease;
     overflow-x: hidden;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 

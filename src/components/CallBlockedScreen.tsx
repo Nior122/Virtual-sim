@@ -48,7 +48,7 @@ export function CallBlockedScreen({
 
   return (
     <div
-      className="w-full h-full bg-[#050505] flex flex-col items-center justify-center p-6 relative"
+      className="w-full h-full bg-[#05060b] flex flex-col items-center justify-center p-6 relative"
       data-call-block={kind}
     >
       {/* Navigation stays available: being out of calls is not a dead end. */}
