@@ -57,6 +57,10 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/image <url>` and `/video <url>` — force-add a direct JPEG or video link
   when a URL is ambiguous
 - `/links` — list every image and video URL currently in the draft
+- `/preview` — the AI writes the profile and the reply carries the media list
+  with ✅ Create profile plus per-photo/per-video delete buttons (see
+  [reviewing the preview](#reviewing-the-preview-preview-buttons))
+- `/restore` — undo the last media you deleted from the preview
 - `/remove 1-7` — delete videos in bulk from the loaded draft (see
   [bulk removal](#bulk-removal-remove-17-189-14628)); `/remove ava 1-7` loads
   that profile first
@@ -407,10 +411,62 @@ What the bot does:
 - While a profile is loaded for editing, `remove 1-7` without the slash works
   too — in edit mode text has no other meaning.
 - Removing everything is the same as `/clearvideos`.
-- `/preview` — Groq writes the full profile; shows the summary
+- In edit mode nothing is thrown away: `/remove` rewrites the working list and
+  `/save` deletes exactly the missing rows.
+
+## Reviewing the preview (`/preview` buttons)
+
+`/preview` writes no data. It sends one message with the profile summary, every
+image and video URL the profile will use, and the buttons to fix that list on
+the spot:
+
+```
+[✅ Create profile]
+[🖼 1] [🖼 2] [🖼 3] [🖼 4]
+[🖼 5] [🖼 6]
+[🎬 1] [🎬 2] [🎬 3] [🎬 4] [🎬 5]
+[🎬 6] [🎬 7] [🎬 8] [🎬 9] [🎬 10]
+[↩️ Undo last removal]   [✖️ Cancel draft]
+```
+
+- **Tap 🖼 / 🎬 to delete that photo or video from the draft.** The preview
+  message is edited in place: the numbered lists, the counts and the buttons
+  all shrink. Nothing is regenerated, so you never have to run `/preview` a
+  second time, and the AI text you already approved stays as it is.
+- **Numbers always match what is on screen.** Deleting `🖼 1` promotes the old
+  photo 2 to photo 1 — and to the profile's thumbnail — because `/confirm`
+  reads the same filtered list the preview shows.
+- **`✅ Create profile` is always there** and writes the profile with the list
+  exactly as displayed, so an untouched preview is a single tap (it does the
+  same thing as `/confirm`).
+- **`↩️ Undo last removal`** (or `/restore`) puts the last deleted item back
+  where it was, one step at a time, including deletions made with `/remove`.
+  The footer only shows the undo button while there is something to undo.
+- **`✖️ Cancel draft`** is `/cancel`: the draft is dropped and nothing is
+  written.
+- Photos get one button each. Videos get buttons up to 15 (5 per row); longer
+  lists keep the `/remove <numbers>` hint and numbers there are the same as on
+  screen.
+- Sending more photos/videos/links after the preview refreshes that same
+  message. Running `/preview` again replaces it — the previous message is
+  deleted so an old button can never act on numbers that have shifted.
+- Re-adding a URL you deleted from the preview un-deletes it.
+- A tap that belongs to a draft which no longer exists (created, cancelled or
+  replaced) answers **"That draft is gone — start with /newprofile"** and
+  creates nothing. Taps are also limited to `OWNER_CHAT_ID` when that is set.
+
+The same removals work by text when you prefer typing: `/remove 1-4` for
+videos, `/removeimage 2,5` for photos, `/remove 1-3` in a new-profile draft for
+either kind. Both paths share one exclusion list, so `/restore` and ↩️ undo
+whatever was deleted last, whichever way it was deleted.
+
+Other draft commands:
+
 - `/setname <name>`, `/setslug <slug>` — override generated values
-- `/status` — inspect the current draft
-- `/confirm` — write the profile and every video into Neon
+- `/status` — inspect the current draft (including how many items are
+  excluded from the preview)
+- `/confirm` (or `/confirm 1,3` on a bulk preview) — write the profile and
+  every video into Neon
 - `/cancel` — discard the draft
 
 ## Environment variables / secrets

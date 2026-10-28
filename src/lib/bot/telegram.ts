@@ -119,6 +119,32 @@ export async function sendMessageWithKeyboard(
   return ok;
 }
 
+/**
+ * Same as `sendMessageWithKeyboard`, but returns the message id of the chunk
+ * that carries the keyboard. The preview keeps that id so a button tap can
+ * edit the message in place instead of piling new ones up.
+ */
+export async function sendTrackedMessage(
+  env: Env,
+  chatId: number,
+  text: string,
+  keyboard?: InlineKeyboard
+): Promise<number | null> {
+  const chunks = splitForTelegram(text);
+  let lastId: number | null = null;
+  for (let i = 0; i < chunks.length; i += 1) {
+    const isLast = i === chunks.length - 1;
+    const result = await callTelegram<{ message_id: number }>(env, "sendMessage", {
+      chat_id: chatId,
+      text: chunks[i],
+      disable_web_page_preview: true,
+      ...(isLast && keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {}),
+    });
+    if (result?.message_id) lastId = result.message_id;
+  }
+  return lastId;
+}
+
 /** Replace the text (and keyboard) of a message the bot sent earlier. */
 export async function editMessageText(
   env: Env,
@@ -135,6 +161,19 @@ export async function editMessageText(
   };
   if (keyboard) payload.reply_markup = { inline_keyboard: keyboard };
   const result = await callTelegram(env, "editMessageText", payload);
+  return !!result;
+}
+
+/** Remove a message (used when a stale preview has to be replaced). */
+export async function deleteMessage(
+  env: Env,
+  chatId: number,
+  messageId: number
+): Promise<boolean> {
+  const result = await callTelegram(env, "deleteMessage", {
+    chat_id: chatId,
+    message_id: messageId,
+  });
   return !!result;
 }
 

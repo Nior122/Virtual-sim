@@ -255,6 +255,14 @@ export interface Draft {
   /** Manual overrides applied on top of Groq output */
   nameOverride?: string | null;
   slugOverride?: string | null;
+  /**
+   * Media the owner deleted from the preview, in removal order. The URLs stay
+   * in the draft (so undo is exact) and are filtered out of every list the bot
+   * shows and from /confirm.
+   */
+  excludedMedia?: Array<{ kind: "image" | "video"; url: string }> | null;
+  /** Chat message id of the last preview, so the buttons can edit it in place */
+  previewMessageId?: number | null;
   createdAt: number;
   updatedAt: number;
 }

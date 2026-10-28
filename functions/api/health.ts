@@ -28,6 +28,7 @@ const FEATURES = [
   "call-regulator",
   "ai-key-diagnostics",
   "bulk-video-remove",
+  "preview-media-buttons",
 ];
 
 export async function onRequestGet(): Promise<Response> {
