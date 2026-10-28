@@ -337,7 +337,9 @@ In your Telegram bot chat:
    profile page link to scrape it — everything is appended to that profile's
    draft.
 3. Change or delete: `/replaceimage 1 <jpeg url>`, `/replacevideo 2 <url>`,
-   `/removeimage 3`, `/removevideo 1`, `/clearvideos`.
+   `/removeimage 3`, and `/remove` for videos in bulk —
+   `/remove 1-7`, `/remove 1,8,9`, `/remove 1-4,6,28`, `/remove all`.
+   `/remove ava 1-7` loads that profile first. `/clearvideos` drops them all.
 4. `/save` — writes the changes to Neon and replies with the final lists.
    `/cancel` discards them instead. Text fields (bio, personality, etc.) are
    not changed by edit mode.
@@ -377,7 +379,8 @@ In your Telegram bot chat:
 | Every profile chats the same / says "Dream Babe" | Fixed: `/api/chat` now loads the persona (name, personality, speaking style, `systemPrompt`) from Neon by id. Redeploy so the new Function is live. |
 | Confirmation link does nothing when tapped | `PUBLIC_BASE_URL` must include `https://`. The bot now adds the scheme automatically if it is missing — set the variable to `https://<project>.pages.dev` and redeploy. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
-| `/save` removed videos I wanted | `/save` deletes video rows you removed with `/removevideo`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
+| `/save` removed videos I wanted | `/save` deletes video rows you removed with `/remove`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
+| `/remove 1-7` says "There is no #7" | The draft has fewer videos than the range asks for. The reply names the real count (`this draft has 5 videos (1-5)`) and **removes nothing** — send a list inside that range. After every `/remove` the bot renumbers what is left, so the next command is typed against the new list. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
 | Video shows a black frame / never starts | The call screen plays remote videos through `/api/video-proxy` and `/api/hls-proxy`; check Pages → Observability → Functions logs for a 4xx/5xx from those routes. Sources that never expose a real stream (login-walled players) cannot be resolved. |
 | `/scrape` stops after a few pages | Default is 5 pages, hard max 10 (Workers subrequest/CPU limits). Scrape more page URLs separately — they merge into the same draft. |

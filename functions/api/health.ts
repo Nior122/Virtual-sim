@@ -27,6 +27,7 @@ const FEATURES = [
   "admin-video-thumbs",
   "call-regulator",
   "ai-key-diagnostics",
+  "bulk-video-remove",
 ];
 
 export async function onRequestGet(): Promise<Response> {
