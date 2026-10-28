@@ -25,6 +25,7 @@ const FEATURES = [
   "admin-backend",
   "private-profile-urls",
   "admin-video-thumbs",
+  "call-regulator",
 ];
 
 export async function onRequestGet(): Promise<Response> {

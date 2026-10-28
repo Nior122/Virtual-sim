@@ -97,6 +97,8 @@ export type CallState =
   | "VIDEO_ERROR"
   | "WAITING_FOR_NEXT_CLIP"
   | "USER_BUSY"
+  /** The client used every call in the rolling window: chat only. */
+  | "CALL_LIMIT"
   | "ENDING"
   | "ENDED";
 

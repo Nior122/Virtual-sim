@@ -31,6 +31,7 @@ import {
   Sparkles,
   ArrowRight,
   Image as ImageIcon,
+  Timer,
 } from "lucide-react";
 import PersonaChatProfileModal from "./PersonaChatProfileModal";
 import {
@@ -65,8 +66,10 @@ import {
   sanitizeHumanChatOutput,
 } from "../utils/mediaRequest";
 import { evaluateMiniTaskAgent, getRandomMissedOrRejectedCallMessage } from "../utils/taskAgent";
+import { fetchCallAccess, postConnectedCall, type CallAccessState } from "../lib/calls/client";
 import { toPlaybackUrl } from "../lib/video/playback";
 import { IncomingCallModal } from "./IncomingCallModal";
+import { CallBlockedScreen } from "./CallBlockedScreen";
 
 interface PendingAttachment {
   file: File;
@@ -109,6 +112,39 @@ export default function CallSession() {
   useEffect(() => {
     callStateRef.current = callState;
   }, [callState]);
+
+  // -------------------------------------------------------------------------
+  // Call regulator (one call per profile every 2h, five calls every 5h).
+  // The server owns the numbers; this component only asks before ringing and
+  // reports the call once the video is actually playing.
+  // -------------------------------------------------------------------------
+  const [callAccess, setCallAccess] = useState<CallAccessState | null>(null);
+  /** "network" = the old busy screen, otherwise the regulator is blocking. */
+  const [busyKind, setBusyKind] = useState<"network" | "cooldown" | "limit">("network");
+  /** Ticks once a second while a countdown is on screen. */
+  const [clockTick, setClockTick] = useState(() => Date.now());
+  const serverSkewRef = useRef(0);
+  /** True once this call has been counted, so one call never costs two. */
+  const countedCallRef = useRef(false);
+  /** Guards against a double-click starting two calls at once. */
+  const beginCallBusyRef = useRef(false);
+
+  const applyAccessState = (state: CallAccessState) => {
+    serverSkewRef.current = state.now - Date.now();
+    setCallAccess(state);
+  };
+
+  /** Milliseconds left before the blocked call becomes possible again. */
+  const retryInMs = () => {
+    if (!callAccess || callAccess.allowed || !callAccess.retryAt) return 0;
+    return Math.max(0, callAccess.retryAt - (clockTick + serverSkewRef.current));
+  };
+
+  useEffect(() => {
+    if (busyKind === "network") return;
+    const timer = window.setInterval(() => setClockTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busyKind]);
 
   const nextVideoTimeoutRef = useRef<any>(null);
   const videoSafetyTimeoutRef = useRef<any>(null);
@@ -519,7 +555,9 @@ export default function CallSession() {
         if (!mounted || !data) return;
         setPersona(data);
         if (!isChatParam) {
-          startCall(data);
+          // Ask the regulator before ringing: a client who used their calls
+          // must see the busy / limit screen, not a phone that never answers.
+          void beginCall(data);
         }
       });
 
@@ -708,6 +746,7 @@ export default function CallSession() {
 
   const startCall = async (overridePersona?: Persona | null, isAnsweringIncoming = false) => {
     const targetPersona = overridePersona || persona;
+    countedCallRef.current = false;
     callStateRef.current = "CONNECTING";
     setCallState("CONNECTING");
     if (!isAnsweringIncoming) {
@@ -767,10 +806,104 @@ export default function CallSession() {
     stopRinging();
     playBusyTone();
 
+    setBusyKind("network");
     callStateRef.current = "USER_BUSY";
     setCallState("USER_BUSY");
     setIsRemoteVideoPlaying(false);
     hasPickedUp.current = false;
+  };
+
+  /**
+   * Refuse a call the regulator does not allow.
+   *
+   * Everything that could still make noise or keep a video running is stopped
+   * first, so the client never hears ringing behind an error screen. The chat
+   * is closed on the way out: the Message button on the block screen opens it
+   * again, and seeing why the call did not happen matters more than the chat
+   * view they were in.
+   */
+  const showBlockedScreen = (state: CallAccessState) => {
+    if (pickupDelayTimeoutRef.current) clearTimeout(pickupDelayTimeoutRef.current);
+    if (videoSafetyTimeoutRef.current) clearTimeout(videoSafetyTimeoutRef.current);
+    if (nextVideoTimeoutRef.current) clearTimeout(nextVideoTimeoutRef.current);
+    if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
+    pickupDelayTimeoutRef.current = null;
+    videoSafetyTimeoutRef.current = null;
+    nextVideoTimeoutRef.current = null;
+    ringingTimeoutRef.current = null;
+
+    stopRinging();
+    playBusyTone();
+    setIsRemoteVideoPlaying(false);
+    hasPickedUp.current = false;
+    hasAutoSwitched.current = false;
+    setChatOpen(false);
+
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      } catch (e) {}
+    }
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      } catch (e) {}
+    }
+
+    if (state.reason === "window-exhausted") {
+      setBusyKind("limit");
+      callStateRef.current = "CALL_LIMIT";
+      setCallState("CALL_LIMIT");
+    } else {
+      setBusyKind("cooldown");
+      callStateRef.current = "USER_BUSY";
+      setCallState("USER_BUSY");
+    }
+  };
+
+  /**
+   * The only way a call may start.
+   *
+   * Asks the server first; if the visitor is out of calls the busy / limit
+   * screen is shown instead of ringing. If the endpoint cannot be reached the
+   * call goes ahead — a busy API must never become a broken product.
+   */
+  const beginCall = async (overridePersona?: Persona | null, isAnsweringIncoming = false) => {
+    if (beginCallBusyRef.current) return;
+    const target = overridePersona || persona;
+    const targetSlug = String(target?.slug || slug || "").trim().toLowerCase();
+    if (!targetSlug) return;
+
+    beginCallBusyRef.current = true;
+    try {
+      const state = await fetchCallAccess(targetSlug);
+      if (state) {
+        applyAccessState(state);
+        if (!state.allowed) {
+          showBlockedScreen(state);
+          return;
+        }
+      }
+      await startCall(overridePersona, isAnsweringIncoming);
+    } finally {
+      beginCallBusyRef.current = false;
+    }
+  };
+
+  /** Called once per call, the moment the persona's video really starts. */
+  const countThisCall = () => {
+    if (countedCallRef.current) return;
+    countedCallRef.current = true;
+    const targetSlug = String(persona?.slug || slug || "").trim().toLowerCase();
+    if (!targetSlug) return;
+    void postConnectedCall(targetSlug)
+      .then((state) => {
+        if (state) applyAccessState(state);
+      })
+      .catch(() => undefined);
   };
 
   const startCallSession = (isAnsweringIncoming = false, targetPersonaParam?: Persona) => {
@@ -894,6 +1027,8 @@ export default function CallSession() {
       hasPickedUp.current = true;
       stopRinging();
       playPickup();
+      // The call connected: this is the moment it costs the client one call.
+      countThisCall();
     }
     setCallState("VIDEO_PLAYING");
 
@@ -1044,7 +1179,8 @@ export default function CallSession() {
     const targetPersona = incomingCallData?.persona || persona;
     setIncomingCallData(null);
     setChatOpen(false);
-    startCall(targetPersona, true);
+    // Answering is still a call with this profile: same limits apply.
+    void beginCall(targetPersona, true);
   };
 
   const handleDeclineIncomingCall = (_trigger?: "rejected" | "timeout") => {
@@ -1086,7 +1222,7 @@ export default function CallSession() {
 
   const handleStartOrSwitchToVideo = () => {
     if (callState === "ENDED" || callState === "IDLE" || callState === "VIDEO_ERROR") {
-      startCall();
+      void beginCall();
     } else {
       if (videoRef.current && videoRef.current.paused) {
         videoRef.current.play().catch(() => {});
@@ -1516,7 +1652,27 @@ export default function CallSession() {
     <div className="h-screen w-full bg-black overflow-hidden relative select-none">
       {/* Main Call View Area (Fullscreen alone when !chatOpen, hidden when in Chat mode) */}
       <div className={`w-full h-full relative flex-col bg-[#050505] ${!chatOpen ? "flex" : "hidden"}`}>
-        {callState === "USER_BUSY" ? (
+        {(callState === "USER_BUSY" && busyKind !== "network") || callState === "CALL_LIMIT" ? (
+          <CallBlockedScreen
+            kind={callState === "CALL_LIMIT" ? "limit" : "cooldown"}
+            personaName={persona?.name || "User"}
+            personaImage={persona?.profileImage}
+            retryInMs={retryInMs()}
+            maxCalls={callAccess?.limits.maxCalls ?? 5}
+            windowHours={callAccess?.limits.windowHours ?? 5}
+            cooldownHours={callAccess?.limits.cooldownHours ?? 2}
+            onMessage={() => setChatOpen(true)}
+            onHome={() => {
+              endCall();
+              goHome();
+            }}
+            onViewProfile={() => {
+              endCall();
+              navigate(`/persona/${persona?.slug || slug}`);
+            }}
+            onCallNow={() => void beginCall()}
+          />
+        ) : callState === "USER_BUSY" ? (
           <div className="w-full h-full bg-[#050505] flex flex-col items-center justify-center p-6 relative">
             {/* Top Navigation Bar: Home & View Profile buttons */}
             <div className="absolute top-6 inset-x-6 md:top-8 md:inset-x-8 flex items-center justify-between z-10">
@@ -1575,7 +1731,7 @@ export default function CallSession() {
                 <span>Message</span>
               </button>
               <button
-                onClick={() => startCall()}
+                onClick={() => void beginCall()}
                 className="flex-1 py-3.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-95 text-white rounded-2xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/20 cursor-pointer"
               >
                 <Video className="w-4 h-4" />
@@ -1661,7 +1817,7 @@ export default function CallSession() {
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm">
               <button
                 type="button"
-                onClick={() => startCall()}
+                onClick={() => void beginCall()}
                 className="w-full sm:flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1147a] via-[#ec4899] to-[#9333ea] hover:opacity-95 text-white font-semibold text-sm shadow-xl shadow-pink-500/25 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
               >
                 <Video className="w-4 h-4" />
@@ -2086,8 +2242,24 @@ export default function CallSession() {
                 </div>
 
                 <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Call Ended</h2>
-                <p className="text-neutral-400 mb-10 text-center">
+                <p className="text-neutral-400 mb-3 text-center">
                   Your conversation with {persona?.name || "the persona"} has ended.
+                </p>
+                <p className="mb-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-neutral-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Timer className="h-3.5 w-3.5" />
+                    {callAccess?.limits.cooldownHours ?? 2}h before you can call {persona?.name || "her"} again
+                  </span>
+                  {callAccess && (
+                    <span className="text-neutral-600">·</span>
+                  )}
+                  {callAccess && (
+                    <span>
+                      {callAccess.remaining > 0
+                        ? `${callAccess.remaining} of ${callAccess.limits.maxCalls} calls left in the next ${callAccess.limits.windowHours}h`
+                        : "No call slots left right now — chat stays open"}
+                    </span>
+                  )}
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
@@ -2099,7 +2271,7 @@ export default function CallSession() {
                     <span>Message</span>
                   </button>
                   <button
-                    onClick={() => startCall()}
+                    onClick={() => void beginCall()}
                     className="flex-1 py-3.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-95 text-white rounded-2xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/20 cursor-pointer"
                   >
                     <Video className="w-4 h-4" />
@@ -2136,7 +2308,12 @@ export default function CallSession() {
             <button
               type="button"
               onClick={() => {
-                if (callState !== "ENDED" && callState !== "IDLE") {
+                if (
+                  callState !== "ENDED" &&
+                  callState !== "IDLE" &&
+                  callState !== "USER_BUSY" &&
+                  callState !== "CALL_LIMIT"
+                ) {
                   setChatOpen(false);
                 } else if (window.history.length > 1) {
                   navigate(-1);
@@ -2144,7 +2321,14 @@ export default function CallSession() {
                   goBrowse();
                 }
               }}
-              title={callState !== "ENDED" && callState !== "IDLE" ? "Back to Call" : "Go Back"}
+              title={
+                callState !== "ENDED" &&
+                callState !== "IDLE" &&
+                callState !== "USER_BUSY" &&
+                callState !== "CALL_LIMIT"
+                  ? "Back to Call"
+                  : "Go Back"
+              }
               className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white border border-white/10 flex items-center justify-center transition-all shrink-0 cursor-pointer group"
             >
               <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -2222,7 +2406,10 @@ export default function CallSession() {
           {/* Right Header Actions */}
           <div className="flex items-center gap-2 shrink-0">
             {/* If call is active: Show pulsating Return to Call button */}
-            {callState !== "ENDED" && callState !== "IDLE" ? (
+            {callState !== "ENDED" &&
+            callState !== "IDLE" &&
+            callState !== "USER_BUSY" &&
+            callState !== "CALL_LIMIT" ? (
               <button
                 type="button"
                 onClick={() => setChatOpen(false)}

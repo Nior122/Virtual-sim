@@ -61,12 +61,20 @@ function isPublicAsset(path: string): boolean {
   return STATIC_EXTENSIONS.test(path);
 }
 
-/** Infrastructure endpoints that never expose profile data. */
+/**
+ * Infrastructure endpoints that never expose profile data.
+ *
+ * `/api/call-access` is the call regulator: it answers "may this visitor call
+ * this profile" for a slug the visitor already knows, returns nothing about
+ * any other profile, and must keep working while private mode is ON — the
+ * call screen is one of the pages private mode still serves.
+ */
 function isPublicApi(path: string): boolean {
   return (
     path === "/api/health" ||
     path === "/api/site-mode" ||
-    path === "/api/telegram-bot"
+    path === "/api/telegram-bot" ||
+    path === "/api/call-access"
   );
 }
 
