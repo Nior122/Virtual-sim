@@ -300,8 +300,15 @@ In your Telegram bot chat:
 8. `/links` — optional: list every image and video URL the draft will use.
 9. `/preview` — the AI writes the full profile (Groq, or OpenRouter if Groq
    is unavailable); use `/setname` or `/setslug` to adjust, then `/preview`
-   again. The preview also lists the image URLs and video URLs it will use.
-10. `/confirm` — the bot writes the persona and all videos into Neon and
+   again. The preview lists every image and video URL it will use and arrives
+   with buttons: `✅ Create profile`, one `🖼 n` per photo, one `🎬 n` per video
+   (up to 15), `↩️ Undo last removal` and `✖️ Cancel draft`. Tap a `🖼`/`🎬`
+   to drop that item — the message updates in place, so nothing is
+   regenerated and you do **not** need to run `/preview` again. Numbers are
+   the ones on screen: delete photo 1 and the old photo 2 becomes the new
+   thumbnail. `/restore` undoes the last deletion if you mis-tap.
+10. `/confirm` — or just tap `✅ Create profile`. The bot writes the persona
+    and all videos into Neon using exactly the list the preview shows and
     replies with the live link `https://YOUR-DOMAIN/dreamgirl/<slug>` plus the
     exact image/video URLs it stored. Embed players are resolved to their real
     stream first; anything with no playable stream is skipped and reported.
@@ -380,6 +387,8 @@ In your Telegram bot chat:
 | Confirmation link does nothing when tapped | `PUBLIC_BASE_URL` must include `https://`. The bot now adds the scheme automatically if it is missing — set the variable to `https://<project>.pages.dev` and redeploy. |
 | `/edit` says "No active profile with slug …" | The slug must match the profile link (`/dreamgirl/<slug>`). Inactive/deleted profiles cannot be edited. |
 | `/save` removed videos I wanted | `/save` deletes video rows you removed with `/remove`/`/clearvideos`. Nothing is changed until `/save`, so `/cancel` always restores the live profile. |
+| `/preview` buttons do nothing | The draft was created, cancelled or replaced, so the reply says "That draft is gone — start with /newprofile". Send `/newprofile`, add the media and run `/preview` again. If the tap says "Only the owner can use these buttons", the chat id does not match `OWNER_CHAT_ID` — `/id` shows the id the bot sees. |
+| Deleted the wrong photo in the preview | `↩️ Undo last removal` on the preview, or send `/restore`. Both walk back one deletion at a time and work for `/remove` too. |
 | `/remove 1-7` says "There is no #7" | The draft has fewer videos than the range asks for. The reply names the real count (`this draft has 5 videos (1-5)`) and **removes nothing** — send a list inside that range. After every `/remove` the bot renumbers what is left, so the next command is typed against the new list. |
 | Want to know why a profile's videos won't play | Send `/checkvideos <slug>` in the bot: it probes every stored URL and says whether a playable stream was found (read-only, changes nothing). |
 | Video shows a black frame / never starts | The call screen plays remote videos through `/api/video-proxy` and `/api/hls-proxy`; check Pages → Observability → Functions logs for a 4xx/5xx from those routes. Sources that never expose a real stream (login-walled players) cannot be resolved. |

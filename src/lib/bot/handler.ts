@@ -4,11 +4,18 @@ import type {
   PersonaDraft,
   ScrapedProfile,
   StoredMedia,
+  TelegramCallbackQuery,
   TelegramMessage,
   TelegramUpdate,
 } from "./types";
 import { MAX_GALLERY, MAX_IMAGES, TELEGRAM_DOWNLOAD_LIMIT_MB } from "./types";
-import { sendMessage } from "./telegram";
+import {
+  answerCallbackQuery,
+  deleteMessage,
+  editMessageText,
+  sendMessage,
+  sendTrackedMessage,
+} from "./telegram";
 import { profileLink } from "./public-url";
 import {
   clearBulkQueue,
@@ -37,6 +44,15 @@ import { generatePersonaDraft } from "./groq";
 import { aiReport, generatePersonaResponse, providerStatus } from "../ai/provider";
 import { sanitizeHumanChatOutput } from "../../utils/mediaRequest";
 import { describeSelection, parseSelection } from "./selection";
+import {
+  buildPreviewKeyboard,
+  excludeUrl,
+  isExcluded,
+  parsePreviewCallback,
+  previewKeyboardHint,
+  restoreUrl,
+  undoLastExclusion,
+} from "./preview";
 import { getPersonaForChat } from "../db/neon";
 import {
   isDirectVideoUrl,
@@ -169,6 +185,9 @@ Any link you paste is scraped and merged into your draft automatically
   Nothing touches the profile until /save.
 /checkvideos <slug> — test an existing profile's video URLs for playback
 /preview — the AI writes the full profile from your material (OpenRouter fallback)
+  and sends it with buttons: 🖼 / 🎬 delete a photo or video before the profile
+  exists, ↩️ Undo restores the last one, ✅ Create profile confirms. /restore
+  does the same undo from the keyboard.
 /setname <name> and /setslug <slug> — override the generated values
 /status — show what the draft currently contains
 /confirm — create the profile and attach all videos
@@ -324,7 +343,7 @@ interface WorkingVideo {
 function workingImages(env: Env, origin: string, draft: Draft): string[] {
   const out: string[] = [];
   const push = (url: string | null | undefined) => {
-    if (url && !out.includes(url)) out.push(url);
+    if (url && !out.includes(url) && !isExcluded(draft, "image", url)) out.push(url);
   };
   for (const media of draft.media.filter((m) => m.kind === "photo")) {
     push(buildPublicMediaUrl(env, origin, media.fileId));
@@ -347,6 +366,7 @@ function workingVideos(env: Env, origin: string, draft: Draft): WorkingVideo[] {
   const out: WorkingVideo[] = [];
   const push = (video: WorkingVideo) => {
     if (!video.url || out.some((v) => v.url === video.url)) return;
+    if (isExcluded(draft, "video", video.url)) return;
     out.push(video);
   };
   draft.media
@@ -413,6 +433,9 @@ function statusLine(env: Env, origin: string, draft: Draft): string {
         } images, ${draft.scraped.videos.length} videos (run /links to list them)`
       : null,
     draft.scraped ? `• Scraped source: ${draft.scraped.sourceUrl}` : null,
+    draft.excludedMedia && draft.excludedMedia.length > 0
+      ? `• Removed from the preview: ${draft.excludedMedia.length} (/restore to undo)`
+      : null,
     draft.edit
       ? `• Run /save to apply, or /cancel to discard the changes`
       : draft.generated
@@ -457,6 +480,8 @@ async function handleCommand(
       draft.bulkAwaiting = false;
       draft.nameOverride = null;
       draft.slugOverride = null;
+      draft.excludedMedia = [];
+      draft.previewMessageId = null;
       await saveDraft(env, draft);
       await sendMessage(
         env,
@@ -471,7 +496,17 @@ async function handleCommand(
 
     case "/cancel": {
       const draft = await getDraft(env, chatId);
+      const cancelledPreview = draft?.previewMessageId ?? null;
       await deleteDraft(env, chatId);
+      if (cancelledPreview && msg.chat.id) {
+        await editMessageText(
+          env,
+          msg.chat.id,
+          cancelledPreview,
+          "✖️ Draft cancelled — nothing was created.",
+          []
+        );
+      }
       await sendMessage(
         env,
         chatId,
@@ -746,6 +781,8 @@ async function handleCommand(
         );
         return;
       }
+      // Re-adding something deleted from the preview un-deletes it.
+      restoreUrl(draft, "image", link);
       if (!draft.imageLinks.includes(link)) draft.imageLinks.push(link);
       draft.generated = null;
       await saveDraft(env, draft);
@@ -760,6 +797,7 @@ async function handleCommand(
         return;
       }
       const link = cleanUrlInput(arg);
+      restoreUrl(draft, "video", link);
       if (!draft.videoLinks.some((v) => v.url === link)) {
         draft.videoLinks.push({ kind: "url", url: link, messageId: msg.message_id });
       }
@@ -1291,6 +1329,42 @@ async function handleCommand(
       return;
     }
 
+    case "/restore": {
+      // Undo for the preview review: bring back the media removed last, from
+      // either a button tap or a /remove command.
+      const draft = await getExistingDraft(env, chatId);
+      if (!draft) return;
+      if (draft.edit) {
+        await sendMessage(
+          env,
+          chatId,
+          "Nothing to restore here — in edit mode use /cancel to throw the changes away."
+        );
+        return;
+      }
+      const restored = undoLastExclusion(draft);
+      if (!restored) {
+        await sendMessage(env, chatId, "Nothing to restore — nothing was deleted from this draft.");
+        return;
+      }
+      await saveDraft(env, draft);
+      const refreshed = await refreshPreviewMessage(env, origin, chatId, draft);
+      if (!refreshed && draft.generated) {
+        await sendPreviewWithButtons(env, origin, chatId, draft, draft.generated);
+      }
+      const { images, videos } = previewLists(env, origin, draft);
+      const left = Array.isArray(draft.excludedMedia) ? draft.excludedMedia.length : 0;
+      await sendMessage(
+        env,
+        chatId,
+        `Restored ${restored.kind}:\n${restored.url}\n\n` +
+          `Now ${images.length} image(s) and ${videos.length} video(s)` +
+          (left > 0 ? ` · ${left} still deleted (/restore undoes one at a time)` : "") +
+          `\n\nTap ✅ Create profile on the preview when it looks right, or /confirm.`
+      );
+      return;
+    }
+
     case "/clearvideos": {
       const draft = await getExistingDraft(env, chatId);
       if (!draft) return;
@@ -1432,6 +1506,8 @@ async function loadProfileIntoDraft(
   draft.generated = null;
   draft.nameOverride = null;
   draft.slugOverride = null;
+  draft.excludedMedia = [];
+  draft.previewMessageId = null;
   draft.imageLinks = [
     profile.profileImage,
     profile.coverImage,
@@ -1499,9 +1575,17 @@ async function runRemoveSelection(
 ): Promise<void> {
   const isVideo = kind === "video";
   const noun = isVideo ? "video" : "image";
-  const items = isVideo
-    ? workingVideos(env, origin, draft).map((v) => videoLabel(v.url))
-    : workingImages(env, origin, draft);
+  // The numbering has to be the one the owner is reading. In edit mode that is
+  // the working list (/links); for a new profile it is the list /preview showed
+  // and /confirm will use, which is filtered to usable media.
+  const urls = draft.edit
+    ? isVideo
+      ? workingVideos(env, origin, draft).map((v) => v.url)
+      : workingImages(env, origin, draft)
+    : isVideo
+      ? collectVideoCandidates(env, origin, draft).map((v) => v.url)
+      : resolveImageSources(env, origin, draft);
+  const items = isVideo ? urls.map((url) => videoLabel(url)) : urls;
 
   if (items.length === 0) {
     await sendMessage(
@@ -1522,8 +1606,7 @@ async function runRemoveSelection(
     await sendMessage(
       env,
       chatId,
-      `${parsed.error}\n\n` +
-        (formatUrlList(`Current ${noun}s`, items) || "")
+      `${parsed.error}\n\n` + (formatUrlList(`Current ${noun}s`, items) || "")
     );
     return;
   }
@@ -1531,22 +1614,36 @@ async function runRemoveSelection(
   const remove = new Set(parsed.indices);
   const removedItems = items.filter((_, index) => remove.has(index + 1));
 
-  if (isVideo) {
-    const videos = workingVideos(env, origin, draft);
-    const kept = videos.filter((_, index) => !remove.has(index + 1));
-    setWorkingVideos(
-      draft,
-      kept.map((v, i) => ({ ...v, title: v.title || `Video ${i + 1}` }))
-    );
+  if (draft.edit) {
+    // Editing a published profile: rewrite the working list. /save then diffs
+    // it against the rows in Neon and deletes what is missing.
+    if (isVideo) {
+      const videos = workingVideos(env, origin, draft);
+      const kept = videos.filter((_, index) => !remove.has(index + 1));
+      setWorkingVideos(
+        draft,
+        kept.map((v, i) => ({ ...v, title: v.title || `Video ${i + 1}` }))
+      );
+    } else {
+      const images = workingImages(env, origin, draft);
+      setWorkingImages(draft, images.filter((_, index) => !remove.has(index + 1)));
+    }
   } else {
-    const images = workingImages(env, origin, draft);
-    setWorkingImages(draft, images.filter((_, index) => !remove.has(index + 1)));
+    // Creating a new profile: remember the URLs as excluded. Nothing is thrown
+    // away, so `↩️ Undo` (or /restore) puts them back exactly where they were.
+    for (const index of parsed.indices) {
+      excludeUrl(draft, isVideo ? "video" : "image", urls[index - 1]);
+    }
   }
   await saveDraft(env, draft);
 
-  const remaining = isVideo
-    ? workingVideos(env, origin, draft).map((v) => videoLabel(v.url))
-    : workingImages(env, origin, draft);
+  const remaining = draft.edit
+    ? isVideo
+      ? workingVideos(env, origin, draft).map((v) => videoLabel(v.url))
+      : workingImages(env, origin, draft)
+    : isVideo
+      ? collectVideoCandidates(env, origin, draft).map((v) => videoLabel(v.url))
+      : resolveImageSources(env, origin, draft);
 
   const heading =
     parsed.indices.length === 1
@@ -1563,7 +1660,7 @@ async function runRemoveSelection(
 
   const applyHint = draft.edit
     ? `Reply /save to delete ${parsed.indices.length === 1 ? "it" : "them"} from ${draft.edit.name} (nothing is applied yet), or /cancel to discard.`
-    : nextStep(draft);
+    : `Tap ✅ Create profile on the preview above when the list looks right (or /confirm). /restore brings the last removal back.`;
 
   await sendMessage(
     env,
@@ -1584,6 +1681,8 @@ async function runRemoveSelection(
         : "") +
       `\n\n${applyHint}`
   );
+
+  if (!draft.edit) await refreshPreviewMessage(env, origin, chatId, draft);
 }
 
 async function getExistingDraft(
@@ -2175,6 +2274,204 @@ async function runSave(env: Env, origin: string, chatId: number): Promise<void> 
   await deleteDraft(env, chatId);
 }
 
+// ---------------------------------------------------------------------------
+// Preview review (delete media before the profile is created)
+// ---------------------------------------------------------------------------
+/** The two lists the preview shows — and the ones /confirm will use. */
+function previewLists(
+  env: Env,
+  origin: string,
+  draft: Draft
+): { images: string[]; videos: ResolvedVideo[] } {
+  return {
+    images: resolveImageSources(env, origin, draft),
+    videos: collectVideoCandidates(env, origin, draft),
+  };
+}
+
+function previewCounts(env: Env, origin: string, draft: Draft) {
+  const { images, videos } = previewLists(env, origin, draft);
+  return {
+    images: images.length,
+    videos: videos.length,
+    canUndo: Array.isArray(draft.excludedMedia) && draft.excludedMedia.length > 0,
+  };
+}
+
+/** Text of the preview message: the generated fields plus both media lists. */
+function buildPreviewText(
+  env: Env,
+  origin: string,
+  draft: Draft,
+  generated: PersonaDraft
+): string {
+  const { images, videos } = previewLists(env, origin, draft);
+  const counts = previewCounts(env, origin, draft);
+  const removed = Array.isArray(draft.excludedMedia) ? draft.excludedMedia.length : 0;
+
+  return (
+    `Preview ready:\n\n` +
+    `Name: ${generated.name}\nSlug: ${generated.slug}\n` +
+    `Age/Location: ${generated.age ?? "?"} / ${
+      [generated.city, generated.country].filter(Boolean).join(", ") || "unknown"
+    }\n` +
+    `Occupation: ${generated.occupation || "unknown"}\n\n` +
+    `Description: ${generated.description}\n\n` +
+    `Personality: ${generated.personality}\n` +
+    `Speaking: ${generated.speakingStyle}\n` +
+    `Flirt level: ${generated.flirtLevel}/4 · Emojis: ${generated.emojiFrequency || "n/a"}\n\n` +
+    `${formatUrlList("Images it will use", images) || "Images it will use: none"}\n\n` +
+    `${formatUrlList("Videos it will use", videos.map((v) => videoLabel(v.url))) || "Videos it will use: none"}\n\n` +
+    (removed > 0 ? `(${removed} media item(s) removed from this preview.)\n\n` : "") +
+    `${previewKeyboardHint(counts)}`
+  );
+}
+
+/**
+ * Edits the message that carries the buttons. Called after every removal,
+ * undo and command so the numbers under the owner's thumb never drift.
+ * Returns false when the message cannot be edited (too old, deleted), which
+ * lets the caller send a fresh one instead.
+ */
+async function refreshPreviewMessage(
+  env: Env,
+  origin: string,
+  chatId: number,
+  draft: Draft
+): Promise<boolean> {
+  if (draft.edit || !draft.generated || !draft.previewMessageId) return false;
+  const keyboard = buildPreviewKeyboard(previewCounts(env, origin, draft));
+  const text = buildPreviewText(env, origin, draft, draft.generated);
+  return editMessageText(env, chatId, draft.previewMessageId, text, keyboard);
+}
+
+/** Sends the preview with its buttons and remembers the message id. */
+async function sendPreviewWithButtons(
+  env: Env,
+  origin: string,
+  chatId: number,
+  draft: Draft,
+  generated: PersonaDraft,
+  staleMessageId?: number | null
+): Promise<void> {
+  // Replacing a preview: drop the old buttons, or a tap on them would act on
+  // numbers that no longer describe the same media.
+  const stale = staleMessageId ?? draft.previewMessageId;
+  if (stale) {
+    await deleteMessage(env, chatId, stale);
+    draft.previewMessageId = null;
+  }
+  const counts = previewCounts(env, origin, draft);
+  const id = await sendTrackedMessage(
+    env,
+    chatId,
+    buildPreviewText(env, origin, draft, generated),
+    buildPreviewKeyboard(counts)
+  );
+  if (id) {
+    draft.previewMessageId = id;
+    await saveDraft(env, draft);
+  }
+}
+
+/** A button tap from a preview message. */
+async function handlePreviewCallback(
+  env: Env,
+  origin: string,
+  callback: TelegramCallbackQuery
+): Promise<void> {
+  const action = parsePreviewCallback(callback.data || "");
+  const chatId = callback.message?.chat?.id;
+  const messageId = callback.message?.message_id;
+  if (!action) {
+    await answerCallbackQuery(env, callback.id, "Unknown action");
+    return;
+  }
+
+  // Same rule as the command handler: with OWNER_CHAT_ID set, only that chat
+  // may create or delete anything.
+  const ownerChat = (env.OWNER_CHAT_ID || "").trim();
+  if (ownerChat && chatId !== undefined && String(chatId) !== ownerChat) {
+    await answerCallbackQuery(env, callback.id, "Only the owner can use these buttons.");
+    return;
+  }
+  if (!chatId) {
+    await answerCallbackQuery(env, callback.id, "No chat on this button.");
+    return;
+  }
+
+  const draft = await getDraft(env, chatId);
+  if (!draft) {
+    await answerCallbackQuery(env, callback.id, "That draft is gone — start with /newprofile.");
+    return;
+  }
+  // The message id of the tapped preview becomes the one we keep editing, so a
+  // preview sent before a restart still refreshes in place.
+  if (messageId) draft.previewMessageId = messageId;
+
+  if (action.kind === "confirm") {
+    // Persist the tapped message id first: runConfirm reads the draft from KV
+    // and retires that message once the profile exists.
+    await saveDraft(env, draft);
+    await answerCallbackQuery(env, callback.id, "Creating the profile…");
+    if (messageId) {
+      await editMessageText(env, chatId, messageId, "✅ Creating the profile from your preview…", []);
+    }
+    await runConfirm(env, origin, chatId);
+    return;
+  }
+
+  if (action.kind === "cancel") {
+    await deleteDraft(env, chatId);
+    await answerCallbackQuery(env, callback.id, "Draft cancelled");
+    if (messageId) {
+      await editMessageText(env, chatId, messageId, "✖️ Draft cancelled — nothing was created.", []);
+    }
+    return;
+  }
+
+  if (action.kind === "undo") {
+    const restored = undoLastExclusion(draft);
+    if (!restored) {
+      await answerCallbackQuery(env, callback.id, "Nothing to undo");
+      return;
+    }
+    await saveDraft(env, draft);
+    const refreshed = await refreshPreviewMessage(env, origin, chatId, draft);
+    if (!refreshed && draft.generated) {
+      await sendPreviewWithButtons(env, origin, chatId, draft, draft.generated);
+    }
+    await answerCallbackQuery(env, callback.id, `Restored ${restored.kind}`);
+    return;
+  }
+
+  // remove
+  const { images, videos } = previewLists(env, origin, draft);
+  const list = action.media === "image" ? images : videos.map((v) => v.url);
+  const url = list[action.index - 1];
+  if (!url) {
+    await answerCallbackQuery(
+      env,
+      callback.id,
+      `There is no ${action.media} #${action.index}`
+    );
+    return;
+  }
+  excludeUrl(draft, action.media, url);
+  await saveDraft(env, draft);
+
+  const refreshed = await refreshPreviewMessage(env, origin, chatId, draft);
+  if (!refreshed && draft.generated) {
+    await sendPreviewWithButtons(env, origin, chatId, draft, draft.generated);
+  }
+  const left = list.length - 1;
+  await answerCallbackQuery(
+    env,
+    callback.id,
+    `Deleted ${action.media} #${action.index} · ${left} left`
+  );
+}
+
 async function runPreview(
   env: Env,
   origin: string,
@@ -2219,24 +2516,9 @@ async function runPreview(
     draft.generated = generated;
     await saveDraft(env, draft);
 
-    await sendMessage(
-      env,
-      chatId,
-      `Preview ready:\n\n` +
-        `Name: ${generated.name}\nSlug: ${generated.slug}\n` +
-        `Age/Location: ${generated.age ?? "?"} / ${[generated.city, generated.country]
-          .filter(Boolean)
-          .join(", ") || "unknown"}\n` +
-        `Occupation: ${generated.occupation || "unknown"}\n\n` +
-        `Description: ${generated.description}\n\n` +
-        `Personality: ${generated.personality}\n` +
-        `Speaking: ${generated.speakingStyle}\n` +
-        `Flirt level: ${generated.flirtLevel}/4 · Emojis: ${generated.emojiFrequency || "n/a"}\n\n` +
-        `${statusLine(env, origin, draft)}\n\n` +
-        `${formatUrlList("Images it will use", resolveImageSources(env, origin, draft)) || "Images it will use: none"}\n\n` +
-        `${formatUrlList("Videos it will use", collectVideoCandidates(env, origin, draft).map((v) => videoLabel(v.url))) || "Videos it will use: none"}\n\n` +
-        `Reply /confirm to create it, or send edits and /preview again.`
-    );
+    // The preview carries the delete buttons and the ✅ button, so the owner
+    // can review the media before anything is written to Neon.
+    await sendPreviewWithButtons(env, origin, chatId, draft, generated);
   } catch (err) {
     const message = (err as Error).message;
     const authProblem = /error (401|402|403|404)\b|All AI providers failed|is not set/i.test(message);
@@ -2258,17 +2540,19 @@ function resolveImageSources(env: Env, origin: string, draft: Draft): string[] {
   const urls: string[] = [];
   // Telegram re-encodes uploaded photos as JPEG, and the media proxy serves
   // them as image/jpeg, so those always qualify.
+  const keep = (url: string) => !isExcluded(draft, "image", url);
   for (const media of draft.media.filter((m) => m.kind === "photo")) {
-    urls.push(buildPublicMediaUrl(env, origin, media.fileId));
+    const url = buildPublicMediaUrl(env, origin, media.fileId);
+    if (keep(url)) urls.push(url);
   }
   // Uploaded photos live on our own media proxy (/api/media/<fileId>, served
   // as image/jpeg); pasted and scraped images must be real JPEGs.
   for (const link of draft.imageLinks) {
-    if (IMAGE_URL_RE.test(link) || isLocalMediaUrl(link)) urls.push(link);
+    if ((IMAGE_URL_RE.test(link) || isLocalMediaUrl(link)) && keep(link)) urls.push(link);
   }
   if (draft.scraped) {
     for (const link of draft.scraped.images) {
-      if (IMAGE_URL_RE.test(link) || isLocalMediaUrl(link)) urls.push(link);
+      if ((IMAGE_URL_RE.test(link) || isLocalMediaUrl(link)) && keep(link)) urls.push(link);
     }
   }
   return [...new Set(urls)].slice(0, MAX_IMAGES);
@@ -2286,20 +2570,19 @@ function collectVideoCandidates(
   draft: Draft
 ): ResolvedVideo[] {
   const videos: ResolvedVideo[] = [];
+  const keep = (url: string) => !isExcluded(draft, "video", url);
   draft.media
     .filter((m) => m.kind === "video")
-    .forEach((m, i) =>
-      videos.push({
-        url: buildPublicMediaUrl(env, origin, m.fileId),
-        title: `Clip ${i + 1}`,
-      })
-    );
-  draft.videoLinks.forEach((v, i) =>
-    videos.push({ url: v.url, title: v.title || `Video ${i + 1}` })
-  );
-  draft.scraped?.videos.forEach((url, i) =>
-    videos.push({ url, title: `Scraped video ${i + 1}` })
-  );
+    .forEach((m, i) => {
+      const url = buildPublicMediaUrl(env, origin, m.fileId);
+      if (keep(url)) videos.push({ url, title: `Clip ${i + 1}` });
+    });
+  draft.videoLinks.forEach((v, i) => {
+    if (keep(v.url)) videos.push({ url: v.url, title: v.title || `Video ${i + 1}` });
+  });
+  draft.scraped?.videos.forEach((url, i) => {
+    if (keep(url)) videos.push({ url, title: `Scraped video ${i + 1}` });
+  });
   const seen = new Set<string>();
   return videos
     .filter((v) => {
@@ -2347,6 +2630,8 @@ async function runConfirm(
 ): Promise<void> {
   const draft = await getExistingDraft(env, chatId);
   if (!draft) return;
+  // Retired once the profile exists, so a stale ✅ tap cannot create a second one.
+  const previewMessageId = draft.previewMessageId ?? null;
 
   const images = resolveImageSources(env, origin, draft);
   if (images.length === 0) {
@@ -2413,6 +2698,15 @@ async function runConfirm(
       `\n\nThe draft is cleared. Start another with /newprofile.`
   );
   await deleteDraft(env, chatId);
+  if (previewMessageId) {
+    await editMessageText(
+      env,
+      chatId,
+      previewMessageId,
+      `✅ Created ${generated.name} — the preview buttons are now inactive.`,
+      []
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2443,6 +2737,7 @@ async function handleIntake(
         continue;
       }
       await registerMedia(env, item.fileId, item.kind, item.mime);
+      restoreUrl(draft, "image", url);
       setWorkingImages(draft, [...images, url]);
       const count = images.length + 1;
       replies.push(
@@ -2463,6 +2758,7 @@ async function handleIntake(
       continue;
     }
     await registerMedia(env, item.fileId, item.kind, item.mime);
+    restoreUrl(draft, "video", url);
     setWorkingVideos(draft, [
       ...videos,
       {
@@ -2494,6 +2790,7 @@ async function handleIntake(
         replies.push(`Video limit is ${MAX_VIDEOS} — ${url} ignored.`);
         continue;
       }
+      restoreUrl(draft, "video", url);
       if (!videos.some((v) => v.url === url)) {
         setWorkingVideos(draft, [
           ...videos,
@@ -2522,6 +2819,7 @@ async function handleIntake(
         );
         continue;
       }
+      restoreUrl(draft, "image", url);
       if (!images.includes(url)) setWorkingImages(draft, [...images, url]);
       replies.push(`Added to the draft as a JPEG image (verified):\n${url}`);
       continue;
@@ -2596,6 +2894,18 @@ async function handleIntake(
     replies.push("Run /save to apply these changes to the profile.");
   }
   await sendMessage(env, chatId, replies.join("\n"));
+
+  // New material arrived after a preview was shown: refresh that message so
+  // its numbered lists and delete buttons cover the new media too.
+  if (!draft.edit && draft.generated && draft.previewMessageId) {
+    const addedMedia = media.length > 0 || /https?:\/\//i.test(text);
+    if (addedMedia) {
+      const refreshed = await refreshPreviewMessage(env, origin, chatId, draft);
+      if (!refreshed) {
+        await sendPreviewWithButtons(env, origin, chatId, draft, draft.generated);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2606,8 +2916,12 @@ export async function handleUpdate(
   update: TelegramUpdate,
   requestOrigin: string
 ): Promise<void> {
-  // Inline keyboard taps (private-mode toggle, link durations).
+  // Inline keyboard taps: preview review buttons first, then the site controls.
   if (update.callback_query) {
+    if (parsePreviewCallback(update.callback_query.data || "")) {
+      await handlePreviewCallback(env, requestOrigin, update.callback_query);
+      return;
+    }
     await handlePrivateCallback(env, requestOrigin, update.callback_query);
     return;
   }
