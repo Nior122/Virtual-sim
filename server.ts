@@ -36,6 +36,11 @@ import {
   getWhatsAppManagerTelegramMessage,
   sanitizeHumanChatOutput,
 } from "./src/utils/mediaRequest";
+import {
+  configureManagerTelegram,
+  hasManagerLink,
+  managerLinkText,
+} from "./src/lib/manager";
 import { evaluateMiniTaskAgent } from "./src/utils/taskAgent";
 import { toPlaybackUrl } from "./src/lib/video/playback";
 
@@ -62,6 +67,10 @@ function getInMemoryPersonas(): Persona[] {
 }
 
 const SITEMAP_BASE_URL = "https://dreambabe.pages.dev";
+
+// The manager's Telegram handle is defined once in src/lib/manager.ts; the
+// local server honours the same MANAGER_TELEGRAM variable as the Pages project.
+configureManagerTelegram(process.env);
 
 async function getAllActiveSlugs(): Promise<string[]> {
   const slugs = new Set<string>();
@@ -764,13 +773,13 @@ app.post("/api/chat", async (req, res) => {
       }
       // 2. Adult pictures / nudes request: Send gallery image with specific rejection message & manager link
       else if (isAdultPicReq) {
-        if (!content || !/t\.me\/KasiQueenbot/i.test(content) || !/(only this type|contact my manager)/i.test(content)) {
+        if (!content || !hasManagerLink(content) || !/(only this type|contact my manager)/i.test(content)) {
           content = getAdultPictureManagerRejectionMessage(persona.name, message);
         }
       }
       // 3. Manager direct inquiry
       else if (isManagerReq) {
-        if (!content || !/t\.me\/KasiQueenbot/i.test(content)) {
+        if (!content || !hasManagerLink(content)) {
           content = getManagerTelegramMessage(persona.name, message);
         }
       }
@@ -791,11 +800,11 @@ app.post("/api/chat", async (req, res) => {
           content = isDateReq
             ? getMeetUpOrDateManagerTelegramMessage(persona.name, message)
             : getSocialMediaManagerTelegramMessage(persona.name, message);
-        } else if (!/t\.me\/KasiQueenbot/i.test(content)) {
+        } else if (!hasManagerLink(content)) {
           // If the AI crafted a creative reply but omitted the exact link, smoothly weave the permanent link in
           content = isDateReq
-            ? `${content.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/KasiQueenbot 😉`
-            : `${content.trim()} Contact my manager on Telegram with this link: t.me/KasiQueenbot 😉`;
+            ? `${content.trim()} Reach out to my manager on Telegram to arrange our meetup: ${managerLinkText()} 😉`
+            : `${content.trim()} Contact my manager on Telegram with this link: ${managerLinkText()} 😉`;
         }
       }
       // 6. If user asked for media and limit is reached, ensure the message guides them to the profile

@@ -1,5 +1,6 @@
 import type { Env, TelegramUpdate } from "../../src/lib/bot/types";
 import { handleUpdate } from "../../src/lib/bot/handler";
+import { configureManagerTelegram } from "../../src/lib/manager";
 
 /**
  * Telegram webhook endpoint.
@@ -13,6 +14,9 @@ export async function onRequestPost({
   request: Request;
   env: Env;
 }): Promise<Response> {
+  // Bot chat replies fall back to the same manager link as the site chat.
+  configureManagerTelegram(env);
+
   // Telegram echoes the secret configured in setWebhook on every call.
   const secret = request.headers.get("x-telegram-bot-api-secret-token");
   if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET) {

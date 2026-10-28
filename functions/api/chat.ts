@@ -1,5 +1,6 @@
 import { generatePersonaResponse } from "../../src/lib/ai/provider";
 import { getPersonaForChat } from "../../src/lib/db/neon";
+import { configureManagerTelegram, managerHandle } from "../../src/lib/manager";
 
 /**
  * Last-resort persona when the row cannot be loaded (missing DB binding, an
@@ -45,6 +46,8 @@ function normalizePersona(row: Record<string, any>) {
 
 export async function onRequestPost({ request, env }: any) {
   try {
+    // One place to change the manager's Telegram handle: MANAGER_TELEGRAM.
+    configureManagerTelegram(env);
     const body = await request.json();
     const { message, history, personaId, persona } = body;
 
@@ -96,11 +99,20 @@ export async function onRequestPost({ request, env }: any) {
       ).slice(0, 120)}"`
     );
 
-    // Note: CallSession.tsx expects the response text in `data.message`
-    return new Response(JSON.stringify({ message: content, provider }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Note: CallSession.tsx expects the response text in `data.message`.
+    // `managerTelegram` lets the browser build the same links (the CTA card and
+    // the "reply was missing the link" fallback) from the deployment's handle.
+    return new Response(
+      JSON.stringify({
+        message: content,
+        provider,
+        managerTelegram: managerHandle(),
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (error: any) {
     console.error("AI Generation Error:", error?.message || error);
     return new Response(
