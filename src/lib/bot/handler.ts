@@ -34,7 +34,7 @@ import {
 } from "./bulk";
 import type { BulkEntry, PreparedBulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
-import { generatePersonaResponse, providerStatus } from "../ai/provider";
+import { aiReport, generatePersonaResponse, providerStatus } from "../ai/provider";
 import { sanitizeHumanChatOutput } from "../../utils/mediaRequest";
 import { getPersonaForChat } from "../db/neon";
 import {
@@ -145,6 +145,8 @@ Any link you paste is scraped and merged into your draft automatically
 /image <url> and /video <url> — force-add a direct JPEG or video link
 /links — list every image and video URL currently in the draft
 /diag <url> — show what the scraper sees on a page (status, <img> count, JPEG checks)
+/aicheck — test every AI provider key right now: shows the key fingerprint,
+  a live auth check and exactly which variable to fix
 /chatcheck <slug> [question] — test a profile's chat engine (shows the configured
   providers, which one answered, and the provider variable names still missing)
 /profiles [page] — every profile with its slug, image count and video count
@@ -867,6 +869,18 @@ async function handleCommand(
       return;
     }
 
+    case "/aicheck": {
+      // Live key check: the only reliable way to tell "the key is not in the
+      // request" from "the key is dead" from "the model is retired".
+      await sendMessage(env, chatId, "Checking the AI provider keys…");
+      try {
+        await sendMessage(env, chatId, await aiReport(env as any));
+      } catch (err) {
+        await sendMessage(env, chatId, `AI check failed: ${(err as Error).message}`);
+      }
+      return;
+    }
+
     case "/chatcheck": {
       // Reproduces exactly what /api/chat does for a stored profile, so the
       // answer engine can be verified from inside Telegram (the reply names
@@ -900,7 +914,7 @@ async function handleCommand(
 
       const started = Date.now();
       try {
-        const { content, provider } = await generatePersonaResponse({
+        const { content, provider, errors } = await generatePersonaResponse({
           // @ts-ignore bare DB row is enough for the prompt builder
           persona: row,
           messages: [{ role: "user", content: question }],
@@ -933,7 +947,12 @@ async function handleCommand(
                 `variable for at least one provider (GROQ_API_KEY + GROQ_MODEL, ` +
                 `OPENROUTER_API_KEY + OPENROUTER_MODEL, or OPENAI_API_KEY + ` +
                 `OPENAI_MODEL) and redeploy. Until then every chat uses the ` +
-                `offline fallback.`
+                `offline fallback.` +
+                (errors.length > 0
+                  ? `\n\nWhat each provider said:\n` +
+                    errors.map((entry) => `  • ${entry}`).join("\n") +
+                    `\n\nRun /aicheck for a live key test.`
+                  : "")
               : "") +
             `\n\nProviders (from env, no model IDs hardcoded):\n` +
             configLines.map((line) => `  ${line}`).join("\n") +
@@ -2064,7 +2083,16 @@ async function runPreview(
         `Reply /confirm to create it, or send edits and /preview again.`
     );
   } catch (err) {
-    await sendMessage(env, chatId, `Preview failed: ${(err as Error).message}`);
+    const message = (err as Error).message;
+    const authProblem = /error (401|402|403|404)\b|All AI providers failed|is not set/i.test(message);
+    await sendMessage(
+      env,
+      chatId,
+      `Preview failed: ${message}` +
+        (authProblem
+          ? `\n\nRun /aicheck — it tests each key live and names the variable to fix.`
+          : "")
+    );
   }
 }
 

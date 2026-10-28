@@ -1,6 +1,8 @@
 import type { Env, PersonaDraft, ScrapedProfile } from "./types";
 import {
+  authHint,
   resolveProviders,
+  withHint,
   type EnvLike,
   type SkippedProvider,
 } from "../ai/openai-compatible";
@@ -95,6 +97,8 @@ interface ChatMessage {
 }
 
 interface Provider {
+  /** groq | openrouter | openai — drives the error hints */
+  id: string;
   name: string;
   url: string;
   apiKey: string;
@@ -124,6 +128,7 @@ function getProviders(env: Env): {
   const resolved = resolveProviders(env as EnvLike);
   return {
     providers: resolved.providers.map((provider) => ({
+      id: provider.id,
       name: provider.label,
       url: `${provider.baseUrl}/chat/completions`,
       apiKey: provider.apiKey,
@@ -169,7 +174,17 @@ async function requestCompletion(
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new ProviderError(
-      `${provider.name} error ${res.status}: ${detail.slice(0, 200)}`,
+      withHint(
+        `${provider.name} error ${res.status}: ${detail.slice(0, 200)}`,
+        authHint({
+          id: provider.id,
+          label: provider.name,
+          status: res.status,
+          body: detail,
+          apiKey: provider.apiKey,
+          model: provider.model,
+        })
+      ),
       res.status
     );
   }
@@ -256,6 +271,7 @@ export async function generatePersonaDraft(
   ];
 
   let lastError: Error | null = null;
+  const failures: string[] = [];
   for (const provider of providers) {
     try {
       const raw = await complete(provider, messages, true);
@@ -284,13 +300,24 @@ export async function generatePersonaDraft(
       );
     } catch (err) {
       lastError = err as Error;
+      // Keep every provider's reason: with two providers configured, showing
+      // only the last one hid which key needed fixing.
+      const first = String(lastError.message || lastError).split("\n")[0].slice(0, 300);
+      const hint = String(lastError.message || "")
+        .split("\n")
+        .slice(1)
+        .join(" ")
+        .trim();
+      failures.push(`${provider.name}: ${first}${hint ? `\n${hint}` : ""}`);
       console.warn(`${provider.name} profile generation failed:`, lastError.message);
     }
   }
 
   throw new Error(
-    `All AI providers failed. Last error: ${
-      lastError?.message || "unknown error"
-    }`
+    failures.length > 1
+      ? `All AI providers failed.\n${failures.map((entry) => `• ${entry}`).join("\n")}`
+      : `All AI providers failed. Last error: ${
+          lastError?.message || "unknown error"
+        }`
   );
 }
