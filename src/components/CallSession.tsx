@@ -1649,9 +1649,9 @@ export default function CallSession() {
   const goBrowse = () => navigate(isPrivate ? ownProfilePath : "/personas");
 
   return (
-    <div className="h-screen w-full bg-black overflow-hidden relative select-none">
+    <div className="h-screen w-full bg-[#07080e] overflow-hidden relative select-none">
       {/* Main Call View Area (Fullscreen alone when !chatOpen, hidden when in Chat mode) */}
-      <div className={`w-full h-full relative flex-col bg-[#050505] ${!chatOpen ? "flex" : "hidden"}`}>
+      <div className={`w-full h-full relative flex-col bg-[#05060b] ${!chatOpen ? "flex" : "hidden"}`}>
         {(callState === "USER_BUSY" && busyKind !== "network") || callState === "CALL_LIMIT" ? (
           <CallBlockedScreen
             kind={callState === "CALL_LIMIT" ? "limit" : "cooldown"}
@@ -1928,7 +1928,7 @@ export default function CallSession() {
             </div>
 
             {/* VIDEO LAYERS */}
-            <div className="flex-1 relative w-full h-full overflow-hidden bg-black flex items-center justify-center">
+            <div className="flex-1 relative w-full h-full overflow-hidden bg-[#05060b] flex items-center justify-center">
               {/* LAYER 1: LOCAL USER CAMERA */}
               <div
                 onClick={!isLocalFull ? toggleScreenSwap : undefined}
@@ -2002,7 +2002,7 @@ export default function CallSession() {
                   ((isEmbedVideoUrl(currentVideo.url) &&
                     !(currentVideo.streamUrl || "").startsWith("/api/")) ||
                     useIframeFallback) ? (
-                    <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
+                    <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-[#05060b]">
                       <iframe
                         key={currentVideo.id}
                         src={getAutoplayEmbedUrl(currentVideo.url)}
