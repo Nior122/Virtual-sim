@@ -1842,6 +1842,54 @@ html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/70
   color: #ffffff;
 }
 
+/* White labels on a brand fill. The bright stops — pink-500, the #ec4899
+   mid-stop, rose-500, emerald-500, teal-600 — leave 12px white text at
+   2.5-3.8:1: visible, but under the 4.5:1 minimum for small text. Each rule
+   below takes one stop of that family a step deeper at the same hue, so every
+   point along the gradient clears 4.5:1. They only match elements that also
+   carry a white-text class, so the logo tiles and avatar rings that reuse the
+   same gradients without text keep the exact brand colours. */
+
+html.light [class~="from-pink-500"][class~="text-white"],
+html.light [class~="from-pink-500"][class~="text-white/90"],
+html.light [class~="from-pink-500"][class~="text-white/80"],
+html.light [class~="from-pink-500"][class~="text-white/75"],
+html.light [class~="from-pink-500"][class~="text-white/70"] {
+  --tw-gradient-from: #d81b7a;
+}
+
+html.light [class~="via-[#ec4899]"][class~="text-white"],
+html.light [class~="via-[#ec4899]"][class~="text-white/90"],
+html.light [class~="via-[#ec4899]"][class~="text-white/80"],
+html.light [class~="via-[#ec4899]"][class~="text-white/75"],
+html.light [class~="via-[#ec4899]"][class~="text-white/70"] {
+  --tw-gradient-via: #d81b7a;
+}
+
+html.light [class~="via-rose-500"][class~="text-white"],
+html.light [class~="via-rose-500"][class~="text-white/90"],
+html.light [class~="via-rose-500"][class~="text-white/80"],
+html.light [class~="via-rose-500"][class~="text-white/75"],
+html.light [class~="via-rose-500"][class~="text-white/70"] {
+  --tw-gradient-via: #e11d48;
+}
+
+html.light [class~="from-emerald-500"][class~="text-white"],
+html.light [class~="from-emerald-500"][class~="text-white/90"],
+html.light [class~="from-emerald-500"][class~="text-white/80"],
+html.light [class~="from-emerald-500"][class~="text-white/75"],
+html.light [class~="from-emerald-500"][class~="text-white/70"] {
+  --tw-gradient-from: #047857;
+}
+
+html.light [class~="to-teal-600"][class~="text-white"],
+html.light [class~="to-teal-600"][class~="text-white/90"],
+html.light [class~="to-teal-600"][class~="text-white/80"],
+html.light [class~="to-teal-600"][class~="text-white/75"],
+html.light [class~="to-teal-600"][class~="text-white/70"] {
+  --tw-gradient-to: #0f766e;
+}
+
 /* Faint black washes (hover scrims, admin info boxes) follow the theme */
 html.light .bg-black\/15 {
   background-color: rgba(15, 23, 42, 0.05);
