@@ -36,6 +36,7 @@ import type { BulkEntry, PreparedBulkEntry } from "./types";
 import { generatePersonaDraft } from "./groq";
 import { aiReport, generatePersonaResponse, providerStatus } from "../ai/provider";
 import { sanitizeHumanChatOutput } from "../../utils/mediaRequest";
+import { describeSelection, parseSelection } from "./selection";
 import { getPersonaForChat } from "../db/neon";
 import {
   isDirectVideoUrl,
@@ -79,6 +80,7 @@ import {
   uniqueSlug,
   updateProfileVideo,
 } from "./repo";
+import type { EditableProfile } from "./repo";
 import { buildPublicMediaUrl } from "./media";
 import { getPublicPersonaBySlug } from "../db/neon";
 
@@ -159,8 +161,12 @@ Any link you paste is scraped and merged into your draft automatically
 /skip <n> — drop a prepared profile · /bulkcancel — abandon the batch
 /edit <slug> — load an existing profile to change its images and videos
   then: send photos/videos or links (they are added), or use
-  /removeimage <n>, /replaceimage <n> <url>, /removevideo <n>,
-  /replacevideo <n> <url>, /clearvideos, and /save to apply
+  /removeimage <n>, /replaceimage <n> <url>, /replacevideo <n> <url>,
+  /clearvideos, and /save to apply
+/remove <list> — delete videos from the loaded draft in bulk: 1-7 · 1,8,9 ·
+  1-4,6,28 · all. /remove <slug> <list> loads that profile first.
+  /removevideo is the same command; /removeimage takes the same lists.
+  Nothing touches the profile until /save.
 /checkvideos <slug> — test an existing profile's video URLs for playback
 /preview — the AI writes the full profile from your material (OpenRouter fallback)
 /setname <name> and /setslug <slug> — override the generated values
@@ -813,7 +819,7 @@ async function handleCommand(
           `${formatUrlList("Images (JPEG)", images) || "Images (JPEG): none"}\n\n` +
           `${formatUrlList("Videos", videos) || "Videos: none"}\n\n` +
           `Use /replaceimage <n> <url>, /replacevideo <n> <url>, ` +
-          `/removeimage <n>, /removevideo <n>.\n` +
+          `/remove 1-7, /removeimage 1,3.\n` +
           nextStep(draft)
       );
       return;
@@ -1107,77 +1113,11 @@ async function handleCommand(
         );
         return;
       }
-      // Accept a bare slug, "@slug" or a full profile URL.
-      let slug = arg.trim().replace(/^@/, "").replace(/^\/+/, "");
-      if (/^https?:\/\//i.test(slug)) {
-        try {
-          const segments = new URL(slug).pathname.split("/").filter(Boolean);
-          slug = segments[segments.length - 1] || slug;
-        } catch {
-          // keep the raw value; the lookup below will fail cleanly
-        }
-      }
-      let profile;
-      try {
-        profile = await loadProfileForEdit(env, slug);
-      } catch (err) {
-        await sendMessage(env, chatId, (err as Error).message);
-        return;
-      }
-      if (!profile) {
-        await sendMessage(env, chatId, `No active profile with slug "${slug}".`);
-        return;
-      }
-
-      let videoRows;
-      try {
-        videoRows = await loadProfileVideos(env, profile.id);
-      } catch (err) {
-        await sendMessage(env, chatId, (err as Error).message);
-        return;
-      }
-
-      const gallery = (profile.gallery || "")
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-
-      const draft = await ensureDraft(env, chatId);
-      const hadMaterial =
-        Boolean(draft.edit) ||
-        draft.media.length > 0 ||
-        draft.imageLinks.length > 0 ||
-        draft.videoLinks.length > 0 ||
-        Boolean(draft.writeUp.trim());
-      draft.writeUp = "";
-      draft.media = [];
-      draft.scraped = null;
-      draft.generated = null;
-      draft.nameOverride = null;
-      draft.slugOverride = null;
-      draft.imageLinks = [
-        profile.profileImage,
-        profile.coverImage,
-        ...gallery,
-      ].filter((url): url is string => Boolean(url));
-      draft.videoLinks = videoRows.map((row, index) => ({
-        kind: "url" as const,
-        url: row.url,
-        title: row.title || `Video ${index + 1}`,
-        messageId: 0,
-        videoId: row.id,
-      }));
-      draft.edit = {
-        personaId: profile.id,
-        slug: profile.slug,
-        name: profile.name,
-        originalVideos: videoRows.map((row) => ({
-          id: row.id,
-          url: row.url,
-          title: row.title,
-        })),
-      };
-      await saveDraft(env, draft);
+      const loaded = await loadProfileIntoDraft(env, chatId, arg);
+      if (!loaded) return;
+      const { profile } = loaded;
+      const draft = loaded.draft;
+      const hadMaterial = loaded.hadMaterial;
 
       await sendMessage(
         env,
@@ -1191,7 +1131,7 @@ async function handleCommand(
           ) || "Videos: none") +
           `\n\nAdd more: send photos/videos or paste links (JPEG images only).` +
           `\nChange: /replaceimage <n> <url>, /replacevideo <n> <url>` +
-          `\nDelete: /removeimage <n>, /removevideo <n>, /clearvideos` +
+          `\nDelete: /remove 1-7, /remove 1,8,9, /removeimage <n>, /clearvideos` +
           `\nApply with /save, or /cancel to discard.` +
           (hadMaterial ? `\n\n(The previous draft was replaced.)` : "")
       );
@@ -1203,30 +1143,11 @@ async function handleCommand(
       return;
     }
 
-    case "/removeimage": {
+    case "/removeimage":
+    case "/removeimages": {
       const draft = await getExistingDraft(env, chatId);
       if (!draft) return;
-      const images = workingImages(env, origin, draft);
-      const index = parseIndex(arg);
-      if (index === null || index > images.length) {
-        await sendMessage(
-          env,
-          chatId,
-          `Usage: /removeimage <number 1-${images.length || 0}>\n` +
-            (formatUrlList("Current images", images) || "No images in the draft yet.")
-        );
-        return;
-      }
-      const [removed] = images.splice(index - 1, 1);
-      setWorkingImages(draft, images);
-      await saveDraft(env, draft);
-      await sendMessage(
-        env,
-        chatId,
-        `Removed image #${index}:\n${removed}\n\n` +
-          (formatUrlList("Images left", images) || "No images left.") +
-          `\n\n${nextStep(draft)}`
-      );
+      await runRemoveSelection(env, origin, chatId, draft, arg, "image");
       return;
     }
 
@@ -1268,39 +1189,57 @@ async function handleCommand(
       return;
     }
 
+    case "/remove":
     case "/removevideo": {
-      const draft = await getExistingDraft(env, chatId);
+      // Two shapes: "/remove 1-7" works on the current draft, and
+      // "/remove ava 1-7" loads that profile first so the owner does not have
+      // to send /edit before every cleanup.
+      const parts = arg.trim().split(/\s+/).filter(Boolean);
+      const first = parts[0] || "";
+      const isSlug =
+        parts.length > 1 &&
+        /^[a-z0-9][a-z0-9._-]*$/i.test(first) &&
+        !/^[\d\s,;#-]+$/.test(first) &&
+        !/^(all|everything|\*)$/i.test(first);
+
+      const list = isSlug ? parts.slice(1).join(" ") : arg.trim();
+      let draft: Draft | null;
+      let replacedDraft = false;
+
+      if (isSlug) {
+        const slug = first.replace(/^@/, "");
+        const existing = await getDraft(env, chatId);
+        if (existing?.edit && existing.edit.slug.toLowerCase() === slug.toLowerCase()) {
+          draft = existing;
+        } else {
+          const loaded = await loadProfileIntoDraft(env, chatId, slug);
+          if (!loaded) return;
+          draft = loaded.draft;
+          replacedDraft = loaded.hadMaterial;
+        }
+      } else {
+        draft = await getExistingDraft(env, chatId);
+      }
       if (!draft) return;
-      const videos = workingVideos(env, origin, draft);
-      const index = parseIndex(arg);
-      if (index === null || index > videos.length) {
+
+      if (list === "") {
         await sendMessage(
           env,
           chatId,
-          `Usage: /removevideo <number 1-${videos.length || 0}>\n` +
-            (formatUrlList(
-              "Current videos",
-              videos.map((v) => videoLabel(v.url))
-            ) || "No videos in the draft yet.")
+          `Usage: /remove 1-7 · /remove 1,8,9 · /remove 1-4,6,28\n` +
+            `Also: /remove ${draft.edit?.slug ?? "<slug>"} 1-7 to load a profile and clean it in one step.\n\n` +
+            `Nothing is deleted from the profile until /save.`
         );
         return;
       }
-      const [removed] = videos.splice(index - 1, 1);
-      setWorkingVideos(
-        draft,
-        videos.map((v, i) => ({ ...v, title: v.title || `Video ${i + 1}` }))
-      );
-      await saveDraft(env, draft);
-      await sendMessage(
-        env,
-        chatId,
-        `Removed video #${index}:\n${removed.url}\n\n` +
-          (formatUrlList(
-            "Videos left",
-            videos.map((v) => videoLabel(v.url))
-          ) || "No videos left.") +
-          `\n\n${nextStep(draft)}`
-      );
+      if (replacedDraft) {
+        await sendMessage(
+          env,
+          chatId,
+          `Loaded /${draft.edit?.slug} — the previous draft was replaced.`
+        );
+      }
+      await runRemoveSelection(env, origin, chatId, draft, list, "video");
       return;
     }
 
@@ -1429,6 +1368,222 @@ async function handleCommand(
         "Unknown command. Send /help to see what I can do."
       );
   }
+}
+
+/**
+ * Loads an existing profile into the chat's draft.
+ *
+ * `/edit ava` and `/remove ava 1-7` both need exactly this, so the loading
+ * lives in one place: slug normalisation, the two database reads, and the
+ * draft reset that keeps the profile's current media as the working list.
+ * Returns null after telling the user why when it cannot load.
+ */
+async function loadProfileIntoDraft(
+  env: Env,
+  chatId: number,
+  rawSlug: string
+): Promise<{ draft: Draft; profile: EditableProfile; hadMaterial: boolean } | null> {
+  // Accept a bare slug, "@slug" or a full profile URL.
+  let slug = rawSlug.trim().replace(/^@/, "").replace(/^\/+/, "");
+  if (/^https?:\/\//i.test(slug)) {
+    try {
+      const segments = new URL(slug).pathname.split("/").filter(Boolean);
+      slug = segments[segments.length - 1] || slug;
+    } catch {
+      // keep the raw value; the lookup below will fail cleanly
+    }
+  }
+
+  let profile: EditableProfile | null;
+  try {
+    profile = await loadProfileForEdit(env, slug);
+  } catch (err) {
+    await sendMessage(env, chatId, (err as Error).message);
+    return null;
+  }
+  if (!profile) {
+    await sendMessage(env, chatId, `No active profile with slug "${slug}".`);
+    return null;
+  }
+
+  let videoRows;
+  try {
+    videoRows = await loadProfileVideos(env, profile.id);
+  } catch (err) {
+    await sendMessage(env, chatId, (err as Error).message);
+    return null;
+  }
+
+  const gallery = (profile.gallery || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const draft = await ensureDraft(env, chatId);
+  const hadMaterial =
+    Boolean(draft.edit) ||
+    draft.media.length > 0 ||
+    draft.imageLinks.length > 0 ||
+    draft.videoLinks.length > 0 ||
+    Boolean(draft.writeUp.trim());
+  draft.writeUp = "";
+  draft.media = [];
+  draft.scraped = null;
+  draft.generated = null;
+  draft.nameOverride = null;
+  draft.slugOverride = null;
+  draft.imageLinks = [
+    profile.profileImage,
+    profile.coverImage,
+    ...gallery,
+  ].filter((url): url is string => Boolean(url));
+  draft.videoLinks = videoRows.map((row, index) => ({
+    kind: "url" as const,
+    url: row.url,
+    title: row.title || `Video ${index + 1}`,
+    messageId: 0,
+    videoId: row.id,
+  }));
+  draft.edit = {
+    personaId: profile.id,
+    slug: profile.slug,
+    name: profile.name,
+    originalVideos: videoRows.map((row) => ({
+      id: row.id,
+      url: row.url,
+      title: row.title,
+    })),
+  };
+  await saveDraft(env, draft);
+
+  return { draft, profile, hadMaterial };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk removal (/remove 1-7, /removevideo 1,8,9, /removeimage 1-4,6)
+// ---------------------------------------------------------------------------
+type RemovableKind = "video" | "image";
+
+/** "#1. url" lines for the entries that were just removed, capped for Telegram. */
+function formatRemovedEntries(
+  items: string[],
+  indices: number[],
+  max = 5
+): string {
+  const lines = indices
+    .slice(0, max)
+    .map((index) => {
+      const value = items[index - 1] ?? "";
+      const trimmed = value.length > 140 ? `${value.slice(0, 137)}…` : value;
+      return `#${index}. ${trimmed}`;
+    });
+  const hidden = indices.length - lines.length;
+  return lines.join("\n") + (hidden > 0 ? `\n…and ${hidden} more` : "");
+}
+
+/**
+ * Removes one or many entries from the draft's numbered list.
+ *
+ * Nothing is written to the database here: in edit mode the profile keeps its
+ * videos until /save, which is what makes a wrong range recoverable (/cancel).
+ * The reply therefore always says so, and lists what is left with its new
+ * numbering so the next command can be typed against it.
+ */
+async function runRemoveSelection(
+  env: Env,
+  origin: string,
+  chatId: number,
+  draft: Draft,
+  rawList: string,
+  kind: RemovableKind
+): Promise<void> {
+  const isVideo = kind === "video";
+  const noun = isVideo ? "video" : "image";
+  const items = isVideo
+    ? workingVideos(env, origin, draft).map((v) => videoLabel(v.url))
+    : workingImages(env, origin, draft);
+
+  if (items.length === 0) {
+    await sendMessage(
+      env,
+      chatId,
+      `There are no ${noun}s in this draft. ` +
+        (isVideo
+          ? "Send videos or paste video links first."
+          : "Send JPEG photos or paste JPEG links first.")
+    );
+    return;
+  }
+
+  const parsed = parseSelection(rawList, items.length, noun);
+  // `in` instead of `!parsed.ok`: the project compiles without strictNullChecks,
+  // where a discriminated union does not narrow on the boolean field alone.
+  if ("error" in parsed) {
+    await sendMessage(
+      env,
+      chatId,
+      `${parsed.error}\n\n` +
+        (formatUrlList(`Current ${noun}s`, items) || "")
+    );
+    return;
+  }
+
+  const remove = new Set(parsed.indices);
+  const removedItems = items.filter((_, index) => remove.has(index + 1));
+
+  if (isVideo) {
+    const videos = workingVideos(env, origin, draft);
+    const kept = videos.filter((_, index) => !remove.has(index + 1));
+    setWorkingVideos(
+      draft,
+      kept.map((v, i) => ({ ...v, title: v.title || `Video ${i + 1}` }))
+    );
+  } else {
+    const images = workingImages(env, origin, draft);
+    setWorkingImages(draft, images.filter((_, index) => !remove.has(index + 1)));
+  }
+  await saveDraft(env, draft);
+
+  const remaining = isVideo
+    ? workingVideos(env, origin, draft).map((v) => videoLabel(v.url))
+    : workingImages(env, origin, draft);
+
+  const heading =
+    parsed.indices.length === 1
+      ? `Removed ${noun} #${parsed.indices[0]}:`
+      : `Removed ${removedItems.length} ${noun}s (#${describeSelection(parsed.indices)}):`;
+
+  // One to three removals: show the URLs so the owner can confirm the right
+  // clips went. A long range would bury the "what is left" list under a wall
+  // of links, and the heading already names every number.
+  const removedPreview =
+    parsed.indices.length <= 3
+      ? `${formatRemovedEntries(items, parsed.indices)}\n\n`
+      : "";
+
+  const applyHint = draft.edit
+    ? `Reply /save to delete ${parsed.indices.length === 1 ? "it" : "them"} from ${draft.edit.name} (nothing is applied yet), or /cancel to discard.`
+    : nextStep(draft);
+
+  await sendMessage(
+    env,
+    chatId,
+    `${heading}\n${removedPreview}` +
+      (formatUrlList(
+        `${isVideo ? "Videos" : "Images"} left`,
+        remaining,
+        remaining.length > 12 ? 8 : MAX_LISTED_URLS
+      ) || `No ${noun}s left.`) +
+      (parsed.duplicates > 0
+        ? `\n\n(${parsed.duplicates} repeated number${
+            parsed.duplicates === 1 ? "" : "s"
+          } ignored.)`
+        : "") +
+      (remaining.length === 0
+        ? `\n\nThat was every ${noun} in the draft.`
+        : "") +
+      `\n\n${applyHint}`
+  );
 }
 
 async function getExistingDraft(
@@ -2511,6 +2666,17 @@ export async function handleUpdate(
       "That did not contain any links. Nothing was generated — send /bulk again when you have your list."
     );
     return;
+  }
+
+  // While editing a profile, "remove 1,8,9" typed without the slash means the
+  // same as /remove: the write-up has no meaning in edit mode (/save ignores
+  // it), so this cannot swallow real content.
+  if (draft?.edit) {
+    const bare = text.match(/^\s*(?:remove|delete|del|rm)\s+(.+)$/i);
+    if (bare) {
+      await runRemoveSelection(env, requestOrigin, chatId, draft, bare[1].trim(), "video");
+      return;
+    }
   }
 
   await handleIntake(env, requestOrigin, msg, text);

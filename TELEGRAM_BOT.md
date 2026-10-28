@@ -57,6 +57,9 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
 - `/image <url>` and `/video <url>` — force-add a direct JPEG or video link
   when a URL is ambiguous
 - `/links` — list every image and video URL currently in the draft
+- `/remove 1-7` — delete videos in bulk from the loaded draft (see
+  [bulk removal](#bulk-removal-remove-17-189-14628)); `/remove ava 1-7` loads
+  that profile first
 - `/profiles [page]` — every profile with its slug plus image and video counts
   (20 per page), e.g. `Ava — slug: ava · 5 image(s) · 12 video(s)`
 - `/bulk <list>` — scrape many pages at once and prepare one profile per entry
@@ -354,12 +357,12 @@ read from the environment only and have no built-in defaults, so both the key
 /edit ava                     # or /edit https://<site>/dreamgirl/ava
 send photos / videos / links  # new material is appended to the profile
 /replaceimage 2 https://…/cover.jpg
-/removevideo 3
+/remove 1-7                   # or: /remove 1,8,9 · /remove 1-4,6,28
 /clearvideos
 /save                         # write the changes to Neon
 ```
 
-- `/removeimage <n>`, `/replaceimage <n> <url>`, `/removevideo <n>`,
+- `/remove <list>`, `/removeimage <list>`, `/replaceimage <n> <url>`,
   `/replacevideo <n> <url>` work on the same 1-based numbering that `/links`
   shows, so you can always see exactly what you are changing.
 - Anything you send while editing (`/scrape`, a pasted profile link, a direct
@@ -370,6 +373,40 @@ send photos / videos / links  # new material is appended to the profile
   new ones inserted. Embed players are resolved to their real stream first.
 - `/preview` in edit mode only lists what `/save` would write (text fields are
   not touched); `/cancel` throws the edit away without changing the profile.
+
+#### Bulk removal (`/remove 1-7`, `/remove 1,8,9`, `/remove 1-4,6,28`)
+
+Deleting 20 videos one `/removevideo` at a time is how a profile ends up with
+the wrong ones left. `/remove` takes a list instead:
+
+```
+/remove 1-7          # a range
+/remove 1,8,9        # individual numbers
+/remove 1-4,6,28     # both, in one line
+/remove 1-4 6 28     # spaces work too
+/remove all          # everything
+/remove ava 1-7      # load that profile first, then remove
+```
+
+What the bot does:
+
+- Numbers are read exactly as `/links` shows them. Ranges typed backwards
+  (`7-3`), autocorrected en dashes (`1–7`), `#3` and `;` separators are all
+  accepted; repeats are collapsed and mentioned.
+- **Out-of-range numbers remove nothing.** `/remove 1-7` on a five-video
+  profile answers `There is no #7 — this draft has 5 videos (1-5)` instead of
+  silently deleting three and looking successful.
+- The reply names every removed number (plus the URLs when you removed three
+  or fewer, so the right clips are obvious), then lists what is left with its
+  **new** numbering — so the next command is typed against the list you can
+  actually see.
+- Nothing reaches Neon until `/save` — so a wrong range costs one `/cancel`,
+  not a rebuild. `/save` then deletes exactly those `PersonaVideo` rows.
+- `/removevideo` is the same command; `/removeimage` and `/removeimages` take
+  the same lists for photos.
+- While a profile is loaded for editing, `remove 1-7` without the slash works
+  too — in edit mode text has no other meaning.
+- Removing everything is the same as `/clearvideos`.
 - `/preview` — Groq writes the full profile; shows the summary
 - `/setname <name>`, `/setslug <slug>` — override generated values
 - `/status` — inspect the current draft
