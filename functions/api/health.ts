@@ -26,6 +26,7 @@ const FEATURES = [
   "private-profile-urls",
   "admin-video-thumbs",
   "call-regulator",
+  "ai-key-diagnostics",
 ];
 
 export async function onRequestGet(): Promise<Response> {

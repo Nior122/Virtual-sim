@@ -64,6 +64,8 @@ Telegram chat ──webhook──▶ Pages Function (/api/telegram-bot)
   them, `/bulkcancel` drops the batch
 - `/diag <url>` — what the scraper sees on a page: HTTP status, `<img>` count,
   candidate image URLs and whether each is really served as JPEG
+- `/aicheck` — test every provider key live (no completion spent): key
+  fingerprint, auth result and the exact variable to fix
 - `/chatcheck <slug> [question]` — ask a stored profile a question outside the
   call screen and see which engine answered (Groq, OpenRouter or the offline
   fallback) plus the raw reply
@@ -276,6 +278,50 @@ Archive API: onlyfans/lanzii
 2. https://img.coomer.st/thumbnail/data/1e/ea/1e…jpg
 ```
 
+### Checking the AI keys (`/aicheck`)
+
+`/aicheck` answers one question: **why did `/preview` fail?** It reports every
+provider the environment resolves to, what the key looks like (a fingerprint,
+never the key) and the result of a real authenticated call
+(`GET /key` on OpenRouter, `GET /models` on Groq and OpenAI-compatible
+gateways) so a dead key is separated from a wrong model, an empty balance or an
+unreachable host:
+
+```
+AI providers (read from the environment only)
+
+1. Groq — primary ❌ 401
+   model: your-groq-model
+   host:  https://api.groq.com/openai/v1
+   key:   gsk_abcd…wxyz (56 chars)
+   said:  {"error":{"message":"Missing Authentication header","code":401}}
+   → Groq did not receive a usable "Authorization: Bearer …" header, which
+     almost always means GROQ_API_KEY was saved with quotes, spaces, a
+     newline or a pasted "Bearer " in front. Key in use: gsk_abcd…wxyz (56
+     chars). Delete the variable in Cloudflare, paste the key again and
+     redeploy.
+
+2. OpenRouter — fallback ✅ working (200)
+   model: your-openrouter-model
+   host:  https://openrouter.ai/api/v1
+   key:   sk-or-v1-ab…9f2c (73 chars)
+
+The first working provider is the one that writes your profiles.
+```
+
+Common verdicts:
+
+| The provider says | What it means |
+|---|---|
+| `401 Missing Authentication header` | The key arrived without a usable `Bearer` token — quotes, spaces, a newline or a pasted `Bearer ` in the variable. The bot strips all of those on read; if it still fails, delete and re-paste the variable |
+| `401 User not found` / `invalid api key` | The key really is dead (deleted, revoked or from another account). Create a new one |
+| `402` | The account is out of credits |
+| `404` | `…_MODEL` is not an exact model ID from that provider |
+| `429` | Rate limited — wait, or put another provider first in `AI_PROVIDER_ORDER` |
+
+`/preview` prints the same hint inline, and `/chatcheck` now lists what every
+provider said when the offline engine answered.
+
 ### Checking the chat engine
 
 `/chatcheck ava what's your name?` asks the stored profile a question exactly
@@ -350,6 +396,11 @@ Set in Pages → project → Settings → Environment variables (Production):
 
 > No model ID is hardcoded anywhere. A provider is skipped (and reported in
 > `/chatcheck`) when its key or its model variable is missing.
+>
+> Keys are cleaned when they are read: surrounding quotes, spaces, newlines,
+> zero-width characters and an accidentally pasted `Bearer ` are removed, so a
+> sloppy copy-paste into the Cloudflare dashboard no longer produces
+> `401 Missing Authentication header`.
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `PUBLIC_BASE_URL` | Public Pages URL (optional; falls back to request origin) |
 

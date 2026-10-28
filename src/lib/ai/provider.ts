@@ -2,10 +2,12 @@ import { Persona, ChatMessage } from "../../types";
 import { buildPersonaContext } from "./persona-context";
 import {
   describeProvider,
+  probeProviders,
   providerStatus,
   requestChatCompletion,
   resolveProviders,
   type EnvLike,
+  type ProviderProbe,
 } from "./openai-compatible";
 
 interface GenerateParams {
@@ -15,7 +17,8 @@ interface GenerateParams {
 }
 
 /** Re-exported so the bot can explain what is (not) configured. */
-export { providerStatus, resolveProviders };
+export { providerStatus, resolveProviders, probeProviders };
+export type { ProviderProbe };
 
 /** Name reported when no AI provider answered. */
 export const OFFLINE_ENGINE = "Dreamgirl Engine";
@@ -117,7 +120,7 @@ export async function generatePersonaResponse({
   persona,
   messages,
   envOverride,
-}: GenerateParams): Promise<{ content: string; provider: string }> {
+}: GenerateParams): Promise<{ content: string; provider: string; errors: string[] }> {
   const systemPrompt = buildPersonaContext(persona);
 
   const recentMessages = prepareHistory(messages);
@@ -134,6 +137,7 @@ export async function generatePersonaResponse({
   // ID is hardcoded, so a retired model is a config error instead of silent
   // fallback behaviour, and any OpenAI-compatible gateway can be used.
   const { providers, skipped } = resolveProviders(envOverride as EnvLike);
+  const errors: string[] = [];
 
   if (providers.length === 0) {
     console.warn(
@@ -150,8 +154,20 @@ export async function generatePersonaResponse({
         temperature: 0.85,
         max_tokens: 160,
       });
-      return { content: sanitizeOutput(content), provider: describeProvider(provider) };
+      return {
+        content: sanitizeOutput(content),
+        provider: describeProvider(provider),
+        errors,
+      };
     } catch (err: any) {
+      const message = String(err?.message || err);
+      const [head, ...rest] = message.split("\n");
+      // Keep the hint line: it is the part that says which variable to fix.
+      errors.push(
+        [head.slice(0, 300), rest.join(" ").trim().slice(0, 300)]
+          .filter(Boolean)
+          .join("\n   ")
+      );
       console.warn(
         `${provider.label} request failed, trying the next provider:`,
         err?.message || err
@@ -161,9 +177,11 @@ export async function generatePersonaResponse({
 
   // Last resort: answer from the persona record (canned but on-topic).
   console.info("Using persona dynamic fallback (no active provider or all calls failed)");
+  for (const entry of skipped) errors.push(`${entry.label}: ${entry.reason}`);
   return {
     content: getLocalFallbackResponse(persona, lastUserMsg),
     provider: OFFLINE_ENGINE,
+    errors,
   };
 }
 
@@ -201,4 +219,56 @@ function sanitizeOutput(raw: string): string {
   }
 
   return content;
+}
+
+/**
+ * `/aicheck` — one message that answers "why is the AI not writing?".
+ *
+ * It lists every provider the environment resolves to, what its key looks like
+ * (fingerprint only, never the secret), and then makes a real authenticated
+ * call to the provider so a bad key is separated from a bad model, an empty
+ * balance or an unreachable host.
+ */
+export async function aiReport(env: EnvLike): Promise<string> {
+  const probes = await probeProviders(env);
+  if (probes.length === 0) {
+    return (
+      "No AI provider is configured.\n" +
+      "Set an API key and a model variable in Pages → Settings → Environment variables:\n" +
+      "  GROQ_API_KEY + GROQ_MODEL\n" +
+      "  OPENROUTER_API_KEY + OPENROUTER_MODEL\n" +
+      "  OPENAI_API_KEY + OPENAI_MODEL"
+    );
+  }
+
+  const lines: string[] = ["AI providers (read from the environment only)", ""];
+  probes.forEach((probe, index) => {
+    if (probe.skipped) {
+      lines.push(`${index + 1}. ${probe.label} — not configured`, `   ${probe.skipped}`, "");
+      return;
+    }
+    const role = probes.filter((entry) => !entry.skipped)[0] === probe ? "primary" : "fallback";
+    const verdict = probe.ok ? `✅ working (${probe.status})` : `❌ ${probe.status ?? "failed"}`;
+    lines.push(
+      `${index + 1}. ${probe.label} — ${role} ${verdict}`,
+      `   model: ${probe.model}`,
+      `   host:  ${probe.baseUrl}`,
+      `   key:   ${probe.key}${probe.keyNote ? ` — ${probe.keyNote}` : ""}`
+    );
+    if (!probe.ok && probe.detail) {
+      lines.push(`   said:  ${probe.detail}`);
+    }
+    if (probe.hint) {
+      lines.push(`   ${probe.hint}`);
+    }
+    lines.push("");
+  });
+
+  const working = probes.filter((probe) => probe.ok);
+  lines.push(
+    working.length > 0
+      ? "The first working provider is the one that writes your profiles."
+      : "None of the providers accepted the request — /preview will fail until one does."
+  );
+  return lines.join("\n").trim();
 }
