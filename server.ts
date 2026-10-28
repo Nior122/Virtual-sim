@@ -764,13 +764,13 @@ app.post("/api/chat", async (req, res) => {
       }
       // 2. Adult pictures / nudes request: Send gallery image with specific rejection message & manager link
       else if (isAdultPicReq) {
-        if (!content || !/t\.me\/Dreamgirlteam/i.test(content) || !/(only this type|contact my manager)/i.test(content)) {
+        if (!content || !/t\.me\/KasiQueenbot/i.test(content) || !/(only this type|contact my manager)/i.test(content)) {
           content = getAdultPictureManagerRejectionMessage(persona.name, message);
         }
       }
       // 3. Manager direct inquiry
       else if (isManagerReq) {
-        if (!content || !/t\.me\/Dreamgirlteam/i.test(content)) {
+        if (!content || !/t\.me\/KasiQueenbot/i.test(content)) {
           content = getManagerTelegramMessage(persona.name, message);
         }
       }
@@ -791,11 +791,11 @@ app.post("/api/chat", async (req, res) => {
           content = isDateReq
             ? getMeetUpOrDateManagerTelegramMessage(persona.name, message)
             : getSocialMediaManagerTelegramMessage(persona.name, message);
-        } else if (!/t\.me\/Dreamgirlteam/i.test(content)) {
+        } else if (!/t\.me\/KasiQueenbot/i.test(content)) {
           // If the AI crafted a creative reply but omitted the exact link, smoothly weave the permanent link in
           content = isDateReq
-            ? `${content.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/Dreamgirlteam 😉`
-            : `${content.trim()} Contact my manager on Telegram with this link: t.me/Dreamgirlteam 😉`;
+            ? `${content.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/KasiQueenbot 😉`
+            : `${content.trim()} Contact my manager on Telegram with this link: t.me/KasiQueenbot 😉`;
         }
       }
       // 6. If user asked for media and limit is reached, ensure the message guides them to the profile

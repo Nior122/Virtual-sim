@@ -42,7 +42,7 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
       text
     )
   ) {
-    return `Mmm you'll have to reach out to my manager on Telegram for that: t.me/Dreamgirlteam 😉✨`;
+    return `Mmm you'll have to reach out to my manager on Telegram for that: t.me/KasiQueenbot 😉✨`;
   }
 
   // Are you a bot / Prove it / Call (kept exactly as before)

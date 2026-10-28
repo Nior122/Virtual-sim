@@ -136,12 +136,12 @@ export function isManagerRequest(text: string): boolean {
 }
 
 export const MANAGER_REQUEST_TELEGRAM_MESSAGES = [
-  "You can reach my manager directly on Telegram right here: t.me/Dreamgirlteam — they coordinate all my bookings, VIP access, and inquiries! ✨",
-  "Here is my manager's direct Telegram link babe: t.me/Dreamgirlteam 💕 Message them anytime!",
-  "Looking for my manager? Hit them up on Telegram with this link: t.me/Dreamgirlteam 😉",
-  "You can message my manager directly on Telegram at: t.me/Dreamgirlteam 💋",
-  "Here's my manager's Telegram link: t.me/Dreamgirlteam — let them know you're chatting with me! ✨",
-  "My manager handles everything on Telegram right here: t.me/Dreamgirlteam — reach out anytime! 🥰",
+  "You can reach my manager directly on Telegram right here: t.me/KasiQueenbot — they coordinate all my bookings, VIP access, and inquiries! ✨",
+  "Here is my manager's direct Telegram link babe: t.me/KasiQueenbot 💕 Message them anytime!",
+  "Looking for my manager? Hit them up on Telegram with this link: t.me/KasiQueenbot 😉",
+  "You can message my manager directly on Telegram at: t.me/KasiQueenbot 💋",
+  "Here's my manager's Telegram link: t.me/KasiQueenbot — let them know you're chatting with me! ✨",
+  "My manager handles everything on Telegram right here: t.me/KasiQueenbot — reach out anytime! 🥰",
 ];
 
 export function getManagerTelegramMessage(personaName?: string, userText?: string): string {
@@ -214,41 +214,41 @@ export function isWhatsAppOrContactRequest(text: string): boolean {
 }
 
 export const SOCIAL_MEDIA_MANAGER_TELEGRAM_MESSAGES = [
-  "Mmm, asking for my socials? 😏 You'll have to reach out to my manager on Telegram for that: t.me/Dreamgirlteam",
-  "Haha I don't give out my private handles or numbers directly in chat babe 🙈 Contact my manager on Telegram with this link: t.me/Dreamgirlteam",
-  "You're bold, I like that! 💋 My manager coordinates all my private socials, VIP access, and bookings—send them a message on Telegram here: t.me/Dreamgirlteam",
-  "A girl's gotta keep some mystery 😉 Hit up my manager on Telegram to get connected with me: t.me/Dreamgirlteam",
-  "I'd get in so much trouble if I dropped my private handles here 😂 Contact my manager on Telegram with this link: t.me/Dreamgirlteam and they'll handle it!",
-  "Direct contact? Mmm tempting, but all my private socials go through my manager on Telegram first: t.me/Dreamgirlteam ✨",
-  "Want my personal contact? Talk to my manager on Telegram right here: t.me/Dreamgirlteam 💕",
-  "Nice try handsome! 😘 You'll have to ask my manager on Telegram first with this link: t.me/Dreamgirlteam",
-  "My manager keeps all my private links and contact details safe. Tap this link to message them on Telegram: t.me/Dreamgirlteam 🥂",
-  "You have to ask my manager nicely on Telegram for that babe: t.me/Dreamgirlteam 😉",
-  "I keep my personal accounts private, but you can definitely get in touch with my manager on Telegram: t.me/Dreamgirlteam 💫",
-  "Haha eager aren't you? 😏 Drop a message to my manager on Telegram with this link to ask about that: t.me/Dreamgirlteam",
-  "All my private socials, VIP links, and number requests are handled by my manager on Telegram: t.me/Dreamgirlteam 🔥",
-  "Shoot a message to my manager on Telegram if you're looking for my private socials: t.me/Dreamgirlteam 💌",
-  "I love that you want to get closer 💕 But my manager handles my personal contact lines—reach out on Telegram at: t.me/Dreamgirlteam",
-  "Ooh, you want my handles already? 🙈 My manager has all my private links, message them on Telegram: t.me/Dreamgirlteam ✨",
-  "Can't post my handles here, but contact my manager on Telegram for that with this link: t.me/Dreamgirlteam 💋",
-  "If you want to take things further, hit up my manager on Telegram at t.me/Dreamgirlteam and tell them I sent you 😉",
-  "Looking to find me elsewhere? 😏 Message my manager on Telegram with this link: t.me/Dreamgirlteam",
-  "My manager manages all my off-platform connections! Reach out to them on Telegram here: t.me/Dreamgirlteam 💕",
+  "Mmm, asking for my socials? 😏 You'll have to reach out to my manager on Telegram for that: t.me/KasiQueenbot",
+  "Haha I don't give out my private handles or numbers directly in chat babe 🙈 Contact my manager on Telegram with this link: t.me/KasiQueenbot",
+  "You're bold, I like that! 💋 My manager coordinates all my private socials, VIP access, and bookings—send them a message on Telegram here: t.me/KasiQueenbot",
+  "A girl's gotta keep some mystery 😉 Hit up my manager on Telegram to get connected with me: t.me/KasiQueenbot",
+  "I'd get in so much trouble if I dropped my private handles here 😂 Contact my manager on Telegram with this link: t.me/KasiQueenbot and they'll handle it!",
+  "Direct contact? Mmm tempting, but all my private socials go through my manager on Telegram first: t.me/KasiQueenbot ✨",
+  "Want my personal contact? Talk to my manager on Telegram right here: t.me/KasiQueenbot 💕",
+  "Nice try handsome! 😘 You'll have to ask my manager on Telegram first with this link: t.me/KasiQueenbot",
+  "My manager keeps all my private links and contact details safe. Tap this link to message them on Telegram: t.me/KasiQueenbot 🥂",
+  "You have to ask my manager nicely on Telegram for that babe: t.me/KasiQueenbot 😉",
+  "I keep my personal accounts private, but you can definitely get in touch with my manager on Telegram: t.me/KasiQueenbot 💫",
+  "Haha eager aren't you? 😏 Drop a message to my manager on Telegram with this link to ask about that: t.me/KasiQueenbot",
+  "All my private socials, VIP links, and number requests are handled by my manager on Telegram: t.me/KasiQueenbot 🔥",
+  "Shoot a message to my manager on Telegram if you're looking for my private socials: t.me/KasiQueenbot 💌",
+  "I love that you want to get closer 💕 But my manager handles my personal contact lines—reach out on Telegram at: t.me/KasiQueenbot",
+  "Ooh, you want my handles already? 🙈 My manager has all my private links, message them on Telegram: t.me/KasiQueenbot ✨",
+  "Can't post my handles here, but contact my manager on Telegram for that with this link: t.me/KasiQueenbot 💋",
+  "If you want to take things further, hit up my manager on Telegram at t.me/KasiQueenbot and tell them I sent you 😉",
+  "Looking to find me elsewhere? 😏 Message my manager on Telegram with this link: t.me/KasiQueenbot",
+  "My manager manages all my off-platform connections! Reach out to them on Telegram here: t.me/KasiQueenbot 💕",
 ];
 
 export const WHATSAPP_MANAGER_TELEGRAM_MESSAGES = SOCIAL_MEDIA_MANAGER_TELEGRAM_MESSAGES;
 
 export const MEETUP_AND_DATE_MANAGER_TELEGRAM_MESSAGES = [
-  "A date with me? Mmm tempting 😏 But all my bookings, appearances, and in-person meetups are coordinated strictly through my manager on Telegram: t.me/Dreamgirlteam",
-  "I'd love that! But my schedule and real-life meetups are organized through my manager on Telegram. Message them here to check my availability: t.me/Dreamgirlteam 💕",
-  "Taking me on a date? You'll have to get past my manager first! 😉 Contact my manager on Telegram with this link to set it up: t.me/Dreamgirlteam",
-  "Meeting up in person? Mmm you're sweet! Drop a message to my manager on Telegram at t.me/Dreamgirlteam — they arrange all my dates and travels ✨",
-  "Haha you want to take me out? I'm intrigued 😏 Send a message to my manager on Telegram here: t.me/Dreamgirlteam to arrange our meetup!",
-  "Dinner and drinks with you? My manager manages all my in-person meetups and VIP dates babe. Hit them up on Telegram here: t.me/Dreamgirlteam 🥂",
-  "Link up in person? Talk to my manager on Telegram with this link: t.me/Dreamgirlteam and they'll give you all the details! 💋",
-  "I don't arrange meetups or dates directly on here babe 🙈 Contact my manager on Telegram at t.me/Dreamgirlteam and they'll handle the arrangements!",
-  "You want to take me on a date? You have good taste 😏 Reach out to my manager on Telegram with this link: t.me/Dreamgirlteam to see when I'm free!",
-  "A real life meetup? Message my manager on Telegram here: t.me/Dreamgirlteam — they coordinate all my dates and travel schedule! ✨",
+  "A date with me? Mmm tempting 😏 But all my bookings, appearances, and in-person meetups are coordinated strictly through my manager on Telegram: t.me/KasiQueenbot",
+  "I'd love that! But my schedule and real-life meetups are organized through my manager on Telegram. Message them here to check my availability: t.me/KasiQueenbot 💕",
+  "Taking me on a date? You'll have to get past my manager first! 😉 Contact my manager on Telegram with this link to set it up: t.me/KasiQueenbot",
+  "Meeting up in person? Mmm you're sweet! Drop a message to my manager on Telegram at t.me/KasiQueenbot — they arrange all my dates and travels ✨",
+  "Haha you want to take me out? I'm intrigued 😏 Send a message to my manager on Telegram here: t.me/KasiQueenbot to arrange our meetup!",
+  "Dinner and drinks with you? My manager manages all my in-person meetups and VIP dates babe. Hit them up on Telegram here: t.me/KasiQueenbot 🥂",
+  "Link up in person? Talk to my manager on Telegram with this link: t.me/KasiQueenbot and they'll give you all the details! 💋",
+  "I don't arrange meetups or dates directly on here babe 🙈 Contact my manager on Telegram at t.me/KasiQueenbot and they'll handle the arrangements!",
+  "You want to take me on a date? You have good taste 😏 Reach out to my manager on Telegram with this link: t.me/KasiQueenbot to see when I'm free!",
+  "A real life meetup? Message my manager on Telegram here: t.me/KasiQueenbot — they coordinate all my dates and travel schedule! ✨",
 ];
 
 export function getMeetUpOrDateManagerTelegramMessage(personaName?: string, userText?: string): string {
@@ -277,10 +277,10 @@ export function getSocialMediaManagerTelegramMessage(personaName?: string, userT
   // Specific platform-themed messages while strictly preserving the permanent link
   if (/\b(insta|instagram|ig)\b/i.test(t)) {
     const igVariants = [
-      "Mmm want my private Insta? 😏 You'll have to reach out to my manager on Telegram for that: t.me/Dreamgirlteam",
-      "Haha my manager manages all my private Instagram handles and VIP bookings! Contact them on Telegram here: t.me/Dreamgirlteam 💕",
-      "Want to follow my private Instagram? Ask my manager on Telegram with this link: t.me/Dreamgirlteam ✨",
-      "My Instagram is curated by my manager babe, drop them a message on Telegram here: t.me/Dreamgirlteam 😉",
+      "Mmm want my private Insta? 😏 You'll have to reach out to my manager on Telegram for that: t.me/KasiQueenbot",
+      "Haha my manager manages all my private Instagram handles and VIP bookings! Contact them on Telegram here: t.me/KasiQueenbot 💕",
+      "Want to follow my private Instagram? Ask my manager on Telegram with this link: t.me/KasiQueenbot ✨",
+      "My Instagram is curated by my manager babe, drop them a message on Telegram here: t.me/KasiQueenbot 😉",
     ];
     const picked = igVariants[Math.floor(Math.random() * igVariants.length)];
     return personaName && Math.random() > 0.6 ? `${picked} Tell them you're chatting with ${personaName}!` : picked;
@@ -288,9 +288,9 @@ export function getSocialMediaManagerTelegramMessage(personaName?: string, userT
 
   if (/\b(snap|snapchat|sc)\b/i.test(t)) {
     const snapVariants = [
-      "Looking for my private Snap? 😉 My private Snapchat links go through my manager on Telegram: t.me/Dreamgirlteam",
-      "Ooh, wanting my Snap already? 🙈 You'll have to ask my manager on Telegram first: t.me/Dreamgirlteam",
-      "My Snapchat is VIP only babe! Contact my manager on Telegram with this link to get added: t.me/Dreamgirlteam 💕",
+      "Looking for my private Snap? 😉 My private Snapchat links go through my manager on Telegram: t.me/KasiQueenbot",
+      "Ooh, wanting my Snap already? 🙈 You'll have to ask my manager on Telegram first: t.me/KasiQueenbot",
+      "My Snapchat is VIP only babe! Contact my manager on Telegram with this link to get added: t.me/KasiQueenbot 💕",
     ];
     const picked = snapVariants[Math.floor(Math.random() * snapVariants.length)];
     return personaName && Math.random() > 0.6 ? `${picked} Tell them you're chatting with ${personaName}!` : picked;
@@ -298,8 +298,8 @@ export function getSocialMediaManagerTelegramMessage(personaName?: string, userT
 
   if (/\b(tiktok|tik\s*tok|tt)\b/i.test(t)) {
     const ttVariants = [
-      "Want to see my private TikToks? 😏 Reach out to my manager on Telegram here: t.me/Dreamgirlteam",
-      "My manager handles all my TikTok handles and socials babe, message them on Telegram: t.me/Dreamgirlteam ✨",
+      "Want to see my private TikToks? 😏 Reach out to my manager on Telegram here: t.me/KasiQueenbot",
+      "My manager handles all my TikTok handles and socials babe, message them on Telegram: t.me/KasiQueenbot ✨",
     ];
     return ttVariants[Math.floor(Math.random() * ttVariants.length)];
   }
@@ -421,14 +421,14 @@ export function isAdultPictureRequest(text: string): boolean {
 }
 
 export const ADULT_PICTURE_MANAGER_REJECTION_MESSAGES = [
-  "Only this type I can send for you here babe 😉 If you want more than this type, contact my manager on Telegram with this link: t.me/Dreamgirlteam for any type you want!",
-  "Haha naughty! Only this type I can send for you, if you want more than this type, contact my manager: t.me/Dreamgirlteam for any type you want 💕",
-  "Mmm tempting, but only this type I can send for you directly in chat! If you want more than this type, contact my manager on Telegram: t.me/Dreamgirlteam for any type you want 😏",
-  "I'm not allowed to send that kind here or my account will get banned 🙈 Only this type I can send for you! If you want more than this type, contact my manager on Telegram with this link: t.me/Dreamgirlteam for any type you want 💋",
-  "Only this type I can send for you here love ✨ If you want more than this type, contact my manager on Telegram at t.me/Dreamgirlteam for any type you want!",
-  "Careful babe, keep it classy on here 😉 Only this type I can send for you, if you want more than this type, contact my manager on Telegram: t.me/Dreamgirlteam for any type you want 🔥",
-  "Only this type of photo I can send for you babe 🙈 If you want more than this type, contact my manager on Telegram with this link: t.me/Dreamgirlteam for any type you want 💕",
-  "You're bold! But only this type I can send for you on this app 😘 If you want more than this type, contact my manager on Telegram: t.me/Dreamgirlteam for any type you want!",
+  "Only this type I can send for you here babe 😉 If you want more than this type, contact my manager on Telegram with this link: t.me/KasiQueenbot for any type you want!",
+  "Haha naughty! Only this type I can send for you, if you want more than this type, contact my manager: t.me/KasiQueenbot for any type you want 💕",
+  "Mmm tempting, but only this type I can send for you directly in chat! If you want more than this type, contact my manager on Telegram: t.me/KasiQueenbot for any type you want 😏",
+  "I'm not allowed to send that kind here or my account will get banned 🙈 Only this type I can send for you! If you want more than this type, contact my manager on Telegram with this link: t.me/KasiQueenbot for any type you want 💋",
+  "Only this type I can send for you here love ✨ If you want more than this type, contact my manager on Telegram at t.me/KasiQueenbot for any type you want!",
+  "Careful babe, keep it classy on here 😉 Only this type I can send for you, if you want more than this type, contact my manager on Telegram: t.me/KasiQueenbot for any type you want 🔥",
+  "Only this type of photo I can send for you babe 🙈 If you want more than this type, contact my manager on Telegram with this link: t.me/KasiQueenbot for any type you want 💕",
+  "You're bold! But only this type I can send for you on this app 😘 If you want more than this type, contact my manager on Telegram: t.me/KasiQueenbot for any type you want!",
 ];
 
 export function getAdultPictureManagerRejectionMessage(personaName?: string, userText?: string): string {
