@@ -1476,13 +1476,13 @@ export default function CallSession() {
           }
           // 2. Adult pictures / nudes request: Send profile image with the specific rejection message & manager link
           else if (isAdultPicReq) {
-            if (!finalContent || !/t\.me\/Dreamgirlteam/i.test(finalContent) || !/(only this type|contact my manager)/i.test(finalContent)) {
+            if (!finalContent || !/t\.me\/KasiQueenbot/i.test(finalContent) || !/(only this type|contact my manager)/i.test(finalContent)) {
               finalContent = getAdultPictureManagerRejectionMessage(persona.name, newMsg.content);
             }
           }
           // 3. Manager direct inquiry
           else if (isManagerReq) {
-            if (!finalContent || !/t\.me\/Dreamgirlteam/i.test(finalContent)) {
+            if (!finalContent || !/t\.me\/KasiQueenbot/i.test(finalContent)) {
               finalContent = getManagerTelegramMessage(persona.name, newMsg.content);
             }
           }
@@ -1502,10 +1502,10 @@ export default function CallSession() {
               finalContent = isDateReq
                 ? getMeetUpOrDateManagerTelegramMessage(persona.name, newMsg.content)
                 : getSocialMediaManagerTelegramMessage(persona.name, newMsg.content);
-            } else if (!/t\.me\/Dreamgirlteam/i.test(finalContent)) {
+            } else if (!/t\.me\/KasiQueenbot/i.test(finalContent)) {
               finalContent = isDateReq
-                ? `${finalContent.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/Dreamgirlteam 😉`
-                : `${finalContent.trim()} Reach out to my manager on Telegram with this link: t.me/Dreamgirlteam 😉`;
+                ? `${finalContent.trim()} Reach out to my manager on Telegram to arrange our meetup: t.me/KasiQueenbot 😉`
+                : `${finalContent.trim()} Reach out to my manager on Telegram with this link: t.me/KasiQueenbot 😉`;
             }
           } else if (hasReachedPhotoLimit && !/profile/i.test(finalContent)) {
             finalContent = PHOTO_LIMIT_EXCEEDED_MESSAGES[Math.floor(Math.random() * PHOTO_LIMIT_EXCEEDED_MESSAGES.length)];
@@ -2614,15 +2614,15 @@ export default function CallSession() {
                     {m.content && (
                       <div>
                         {(() => {
-                          if (/t\.me\/Dreamgirlteam/i.test(m.content)) {
-                            const parts = m.content.split(/(t\.me\/Dreamgirlteam)/gi);
+                          if (/t\.me\/KasiQueenbot/i.test(m.content)) {
+                            const parts = m.content.split(/(t\.me\/KasiQueenbot)/gi);
                             return (
                               <span>
                                 {parts.map((part, idx) =>
-                                  /t\.me\/Dreamgirlteam/i.test(part) ? (
+                                  /t\.me\/KasiQueenbot/i.test(part) ? (
                                     <a
                                       key={idx}
-                                      href="https://t.me/Dreamgirlteam"
+                                      href="https://t.me/KasiQueenbot"
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="underline font-bold text-sky-300 hover:text-sky-200 transition-colors"
@@ -2642,16 +2642,16 @@ export default function CallSession() {
                     )}
 
                     {/* Quick-action button if message contains manager telegram link */}
-                    {m.role === "assistant" && /t\.me\/Dreamgirlteam/i.test(m.content) && (
+                    {m.role === "assistant" && /t\.me\/KasiQueenbot/i.test(m.content) && (
                       <a
-                        href="https://t.me/Dreamgirlteam"
+                        href="https://t.me/KasiQueenbot"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mt-2.5 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-200 text-[11px] font-medium transition-all shadow-sm group/btn cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5 truncate">
                           <Send className="w-3.5 h-3.5 text-sky-400 group-hover/btn:scale-110 transition-transform shrink-0" />
-                          <span className="truncate font-semibold">Contact Manager on Telegram (@Dreamgirlteam)</span>
+                          <span className="truncate font-semibold">Contact Manager on Telegram (@KasiQueenbot)</span>
                         </span>
                         <ArrowRight className="w-3.5 h-3.5 text-sky-400/80 group-hover/btn:translate-x-0.5 transition-transform shrink-0" />
                       </a>
