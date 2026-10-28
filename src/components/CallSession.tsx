@@ -1673,7 +1673,7 @@ export default function CallSession() {
             onCallNow={() => void beginCall()}
           />
         ) : callState === "USER_BUSY" ? (
-          <div className="w-full h-full bg-[#050505] flex flex-col items-center justify-center p-6 relative">
+          <div className="w-full h-full bg-[#05060b] flex flex-col items-center justify-center p-6 relative">
             {/* Top Navigation Bar: Home & View Profile buttons */}
             <div className="absolute top-6 inset-x-6 md:top-8 md:inset-x-8 flex items-center justify-between z-10">
               <button

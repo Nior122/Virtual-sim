@@ -85,7 +85,7 @@ export default function UserSettingsModal() {
           initial={{ opacity: 0, scale: 0.95, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 12 }}
-          className="relative w-full max-w-xl bg-[#0e101f] text-neutral-100 dark:bg-[#0e101f] dark:text-neutral-100 border border-white/[0.12] rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+          className="relative w-full max-w-xl bg-[#0e101f] text-neutral-100 border border-white/[0.12] rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Ambient Glows */}

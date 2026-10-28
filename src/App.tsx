@@ -168,7 +168,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="min-h-screen bg-[#07080e] text-neutral-100 dark:bg-[#07080e] dark:text-neutral-100 font-sans selection:bg-pink-500/30">
+        <div className="min-h-screen bg-[#07080e] text-neutral-100 font-sans selection:bg-pink-500/30">
           <AppShell />
 
           {/* Media Protection Security Notice Toast */}

@@ -70,7 +70,7 @@ export default function Navbar({
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full bg-[#07080e]/90 dark:bg-[#07080e]/90 light:bg-white/90 backdrop-blur-xl border-b border-white/[0.08] dark:border-white/[0.08] light:border-slate-200 transition-colors">
+      <header className="sticky top-0 z-50 w-full bg-[#07080e]/90 backdrop-blur-xl border-b border-white/[0.08] transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between gap-4">
           {/* LOGO */}
           <Link to="/" className="flex items-center gap-2.5 group shrink-0">
@@ -78,7 +78,7 @@ export default function Navbar({
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div className="flex items-center">
-              <span className="font-extrabold text-xl sm:text-2xl tracking-tight text-white dark:text-white light:text-slate-900 group-hover:text-pink-400 transition-colors">
+              <span className="font-extrabold text-xl sm:text-2xl tracking-tight text-white group-hover:text-pink-400 transition-colors">
                 Dream Babe
               </span>
             </div>
