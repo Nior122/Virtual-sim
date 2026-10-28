@@ -18,7 +18,6 @@
    rather than in the component: an unknown utility keeps its dark value and
    shows up as a dark block on a light page.
    ========================================================================== */
-
 html.light {
   --bg-primary: #f5f6fa;
   --text-primary: #0b1220;
@@ -36,8 +35,8 @@ html.light {
   --lt-fg-2: #1e293b;
   --lt-fg-3: #334155;
   --lt-fg-4: #55637a;
-  --lt-fg-5: #6b7a91;
-  --lt-fg-6: #8592a6;
+  --lt-fg-5: #5b6b80;
+  --lt-fg-6: #64748b;
 
   /* Lines */
   --lt-line-1: rgba(15, 23, 42, 0.06);
@@ -289,82 +288,98 @@ html.light .from-pink-950\/40 {
 html.light .to-pink-900\/20 {
   --tw-gradient-to: #ffe9f3;
 }
+
 /* Photo scrims (inset-0 + a transparent stop) stay dark over the image. */
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-[#0c0e18]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-[#0c0e18]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-[#0c0e18]"] {
   --tw-gradient-from: #0c0e18;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-[#0c0e18]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-[#0c0e18]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-[#0c0e18]"] {
   --tw-gradient-via: #0c0e18;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="to-[#0c0e18]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="to-[#0c0e18]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="to-[#0c0e18]"] {
   --tw-gradient-to: #0c0e18;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-[#0c0e18]/80"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-[#0c0e18]/80"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-[#0c0e18]/80"] {
   --tw-gradient-from: rgba(12, 14, 24, 0.8);
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-[#0c0e18]/40"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-[#0c0e18]/40"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-[#0c0e18]/40"] {
   --tw-gradient-via: rgba(12, 14, 24, 0.4);
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-[#0d0d12]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-[#0d0d12]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-[#0d0d12]"] {
   --tw-gradient-from: #0d0d12;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-[#0d0f1a]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-[#0d0f1a]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-[#0d0f1a]"] {
   --tw-gradient-from: #0d0f1a;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="to-[#0d0f1a]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="to-[#0d0f1a]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="to-[#0d0f1a]"] {
   --tw-gradient-to: #0d0f1a;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-[#120f1f]"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-[#120f1f]"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-[#120f1f]"] {
   --tw-gradient-via: #120f1f;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-[#120f1f]/50"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-[#120f1f]/50"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-[#120f1f]/50"] {
   --tw-gradient-via: rgba(18, 15, 31, 0.5);
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-neutral-800"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-neutral-800"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-neutral-800"] {
   --tw-gradient-from: #262626;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="from-neutral-900"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="from-neutral-900"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="from-neutral-900"] {
   --tw-gradient-from: #171717;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-neutral-900"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-neutral-900"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-neutral-900"] {
   --tw-gradient-via: #171717;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="to-neutral-900"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="to-neutral-900"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="to-neutral-900"] {
   --tw-gradient-to: #171717;
 }
+
 html.light [class~="inset-0"][class~="to-transparent"][class~="via-neutral-950"],
 html.light [class~="inset-0"][class~="via-transparent"][class~="via-neutral-950"],
 html.light [class~="inset-0"][class~="to-black/30"][class~="via-neutral-950"] {
   --tw-gradient-via: #0a0a0a;
 }
+
 /* Hover washes: a white overlay is invisible on a white card. */
 html.light .hover\:bg-white\/5:hover,
 html.light .hover\:bg-white\/\[0\.04\]:hover,
@@ -372,47 +387,142 @@ html.light .hover\:bg-white\/\[0\.05\]:hover,
 html.light .hover\:bg-white\/\[0\.06\]:hover {
   background-color: rgba(15, 23, 42, 0.06);
 }
+
 html.light .hover\:bg-white\/10:hover,
 html.light .hover\:bg-white\/\[0\.08\]:hover,
 html.light .hover\:bg-white\/\[0\.1\]:hover,
 html.light .hover\:bg-white\/\[0\.12\]:hover {
   background-color: rgba(15, 23, 42, 0.09);
 }
+
 html.light .hover\:bg-white\/15:hover,
 html.light .hover\:bg-white\/\[0\.14\]:hover {
   background-color: rgba(15, 23, 42, 0.12);
 }
+
 html.light .hover\:bg-white\/20:hover {
   background-color: rgba(15, 23, 42, 0.16);
 }
+
 /* …but not on a surface that stayed dark. */
-html.light [class*="bg-black"] .hover\:bg-white\/5:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/5:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/5:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.04\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.04\]:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.05\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.05\]:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.06\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.06\]:hover {
   background-color: rgba(255, 255, 255, 0.06);
 }
-html.light [class*="bg-black"] .hover\:bg-white\/10:hover,
+
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/10:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/10:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.08\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.08\]:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.1\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.1\]:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.12\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.12\]:hover {
   background-color: rgba(255, 255, 255, 0.09);
 }
-html.light [class*="bg-black"] .hover\:bg-white\/15:hover,
+
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/15:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/15:hover,
-html.light [class*="bg-black"] .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/\[0\.14\]:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/\[0\.14\]:hover {
   background-color: rgba(255, 255, 255, 0.12);
 }
-html.light [class*="bg-black"] .hover\:bg-white\/20:hover,
+
+html.light [class~="bg-black"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/95"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/80"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/75"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/70"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/60"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/50"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="bg-black/40"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
+html.light [class~="from-black/80"]:not([class~="fixed"]) .hover\:bg-white\/20:hover,
 html.light [class*="bg-gradient"] .hover\:bg-white\/20:hover {
   background-color: rgba(255, 255, 255, 0.16);
 }
@@ -529,12 +639,12 @@ html.light .text-pink-200 {
 
 html.light .text-pink-300,
 html.light .text-pink-300\/80 {
-  color: #be185d;
+  color: #a2114f;
 }
 
 html.light .text-pink-400,
 html.light .text-pink-400\/80 {
-  color: #db2777;
+  color: #a2114f;
 }
 
 html.light .text-pink-500 {
@@ -559,7 +669,7 @@ html.light .text-emerald-300 {
 }
 
 html.light .text-emerald-400 {
-  color: #059669;
+  color: #047857;
 }
 
 html.light .text-amber-200 {
@@ -603,224 +713,715 @@ html.light .text-red-400 {
 html.light .text-blue-400 {
   color: #2563eb;
 }
+
 /* Media surfaces never leave dark mode: photo overlays (bg-black/…) and the
    live call stage. Text on them keeps the colour it had in dark mode, so a
    pink label over a photo stays legible instead of turning maroon. */
-html.light [class*="bg-black"][class~="text-neutral-100"],
-html.light [class*="bg-black"] [class~="text-neutral-100"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-100"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-100"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-100"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-100"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-100"] {
   color: #f3f4f6;
 }
 
-html.light [class*="bg-black"][class~="text-neutral-200"],
-html.light [class*="bg-black"] [class~="text-neutral-200"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-200"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-200"] {
   color: #e5e7eb;
 }
 
-html.light [class*="bg-black"][class~="text-neutral-300"],
-html.light [class*="bg-black"] [class~="text-neutral-300"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-300"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-300"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-300"] {
   color: #d4d4d8;
 }
 
-html.light [class*="bg-black"][class~="text-neutral-400"],
-html.light [class*="bg-black"] [class~="text-neutral-400"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-400"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-400"] {
   color: #a1a1aa;
 }
 
-html.light [class*="bg-black"][class~="text-neutral-500"],
-html.light [class*="bg-black"] [class~="text-neutral-500"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-500"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-500"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-500"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-500"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-500"] {
   color: #71717a;
 }
 
-html.light [class*="bg-black"][class~="text-neutral-600"],
-html.light [class*="bg-black"] [class~="text-neutral-600"],
-html.light [class~="bg-[#050505]"][class~="text-neutral-600"],
-html.light [class~="bg-[#050505]"] [class~="text-neutral-600"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-neutral-600"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-neutral-600"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-neutral-600"] {
   color: #52525b;
 }
 
-html.light [class*="bg-black"][class~="text-white"],
-html.light [class*="bg-black"] [class~="text-white"],
-html.light [class*="bg-black"][class~="text-white/90"],
-html.light [class*="bg-black"] [class~="text-white/90"],
-html.light [class*="bg-black"][class~="text-white/80"],
-html.light [class*="bg-black"] [class~="text-white/80"],
-html.light [class*="bg-black"][class~="text-white/75"],
-html.light [class*="bg-black"] [class~="text-white/75"],
-html.light [class*="bg-black"][class~="text-white/70"],
-html.light [class*="bg-black"] [class~="text-white/70"],
-html.light [class~="bg-[#050505]"][class~="text-white"],
-html.light [class~="bg-[#050505]"] [class~="text-white"],
-html.light [class~="bg-[#050505]"][class~="text-white/90"],
-html.light [class~="bg-[#050505]"] [class~="text-white/90"],
-html.light [class~="bg-[#050505]"][class~="text-white/80"],
-html.light [class~="bg-[#050505]"] [class~="text-white/80"],
-html.light [class~="bg-[#050505]"][class~="text-white/75"],
-html.light [class~="bg-[#050505]"] [class~="text-white/75"],
-html.light [class~="bg-[#050505]"][class~="text-white/70"],
-html.light [class~="bg-[#050505]"] [class~="text-white/70"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/70"] {
   color: #ffffff;
 }
 
-html.light [class*="bg-black"][class~="text-pink-200"],
-html.light [class*="bg-black"] [class~="text-pink-200"],
-html.light [class~="bg-[#050505]"][class~="text-pink-200"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-200"] {
   color: #fbcfe8;
 }
 
-html.light [class*="bg-black"][class~="text-pink-300"],
-html.light [class*="bg-black"] [class~="text-pink-300"],
-html.light [class*="bg-black"][class~="text-pink-300/80"],
-html.light [class*="bg-black"] [class~="text-pink-300/80"],
-html.light [class~="bg-[#050505]"][class~="text-pink-300"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-300"],
-html.light [class~="bg-[#050505]"][class~="text-pink-300/80"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-300/80"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-300"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-300/80"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-300/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-300/80"] {
   color: #f9a8d4;
 }
 
-html.light [class*="bg-black"][class~="text-pink-400"],
-html.light [class*="bg-black"] [class~="text-pink-400"],
-html.light [class*="bg-black"][class~="text-pink-400/80"],
-html.light [class*="bg-black"] [class~="text-pink-400/80"],
-html.light [class~="bg-[#050505]"][class~="text-pink-400"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-400"],
-html.light [class~="bg-[#050505]"][class~="text-pink-400/80"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-400/80"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-400"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-400/80"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-400/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-400/80"] {
   color: #f472b6;
 }
 
-html.light [class*="bg-black"][class~="text-pink-500"],
-html.light [class*="bg-black"] [class~="text-pink-500"],
-html.light [class~="bg-[#050505]"][class~="text-pink-500"],
-html.light [class~="bg-[#050505]"] [class~="text-pink-500"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-pink-500"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-pink-500"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-pink-500"] {
   color: #ec4899;
 }
 
-html.light [class*="bg-black"][class~="text-purple-200"],
-html.light [class*="bg-black"] [class~="text-purple-200"],
-html.light [class~="bg-[#050505]"][class~="text-purple-200"],
-html.light [class~="bg-[#050505]"] [class~="text-purple-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-purple-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-purple-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-purple-200"] {
   color: #e9d5ff;
 }
 
-html.light [class*="bg-black"][class~="text-purple-300"],
-html.light [class*="bg-black"] [class~="text-purple-300"],
-html.light [class*="bg-black"][class~="text-purple-300/90"],
-html.light [class*="bg-black"] [class~="text-purple-300/90"],
-html.light [class~="bg-[#050505]"][class~="text-purple-300"],
-html.light [class~="bg-[#050505]"] [class~="text-purple-300"],
-html.light [class~="bg-[#050505]"][class~="text-purple-300/90"],
-html.light [class~="bg-[#050505]"] [class~="text-purple-300/90"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-purple-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-purple-300"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-purple-300/90"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-purple-300/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-purple-300/90"] {
   color: #d8b4fe;
 }
 
-html.light [class*="bg-black"][class~="text-purple-400"],
-html.light [class*="bg-black"] [class~="text-purple-400"],
-html.light [class~="bg-[#050505]"][class~="text-purple-400"],
-html.light [class~="bg-[#050505]"] [class~="text-purple-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-purple-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-purple-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-purple-400"] {
   color: #c084fc;
 }
 
-html.light [class*="bg-black"][class~="text-emerald-300"],
-html.light [class*="bg-black"] [class~="text-emerald-300"],
-html.light [class~="bg-[#050505]"][class~="text-emerald-300"],
-html.light [class~="bg-[#050505]"] [class~="text-emerald-300"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-emerald-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-emerald-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-emerald-300"] {
   color: #6ee7b7;
 }
 
-html.light [class*="bg-black"][class~="text-emerald-400"],
-html.light [class*="bg-black"] [class~="text-emerald-400"],
-html.light [class~="bg-[#050505]"][class~="text-emerald-400"],
-html.light [class~="bg-[#050505]"] [class~="text-emerald-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-emerald-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-emerald-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-emerald-400"] {
   color: #34d399;
 }
 
-html.light [class*="bg-black"][class~="text-amber-200"],
-html.light [class*="bg-black"] [class~="text-amber-200"],
-html.light [class~="bg-[#050505]"][class~="text-amber-200"],
-html.light [class~="bg-[#050505]"] [class~="text-amber-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-amber-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-amber-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-amber-200"] {
   color: #fde68a;
 }
 
-html.light [class*="bg-black"][class~="text-amber-300"],
-html.light [class*="bg-black"] [class~="text-amber-300"],
-html.light [class*="bg-black"][class~="text-amber-400"],
-html.light [class*="bg-black"] [class~="text-amber-400"],
-html.light [class~="bg-[#050505]"][class~="text-amber-300"],
-html.light [class~="bg-[#050505]"] [class~="text-amber-300"],
-html.light [class~="bg-[#050505]"][class~="text-amber-400"],
-html.light [class~="bg-[#050505]"] [class~="text-amber-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-amber-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-amber-300"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-amber-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-amber-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-amber-400"] {
   color: #fbbf24;
 }
 
-html.light [class*="bg-black"][class~="text-sky-200"],
-html.light [class*="bg-black"] [class~="text-sky-200"],
-html.light [class~="bg-[#050505]"][class~="text-sky-200"],
-html.light [class~="bg-[#050505]"] [class~="text-sky-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-sky-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-sky-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-sky-200"] {
   color: #bae6fd;
 }
 
-html.light [class*="bg-black"][class~="text-sky-300"],
-html.light [class*="bg-black"] [class~="text-sky-300"],
-html.light [class~="bg-[#050505]"][class~="text-sky-300"],
-html.light [class~="bg-[#050505]"] [class~="text-sky-300"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-sky-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-sky-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-sky-300"] {
   color: #7dd3fc;
 }
 
-html.light [class*="bg-black"][class~="text-sky-400"],
-html.light [class*="bg-black"] [class~="text-sky-400"],
-html.light [class*="bg-black"][class~="text-sky-400/80"],
-html.light [class*="bg-black"] [class~="text-sky-400/80"],
-html.light [class~="bg-[#050505]"][class~="text-sky-400"],
-html.light [class~="bg-[#050505]"] [class~="text-sky-400"],
-html.light [class~="bg-[#050505]"][class~="text-sky-400/80"],
-html.light [class~="bg-[#050505]"] [class~="text-sky-400/80"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-sky-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-sky-400"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-sky-400/80"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-sky-400/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-sky-400/80"] {
   color: #38bdf8;
 }
 
-html.light [class*="bg-black"][class~="text-rose-200"],
-html.light [class*="bg-black"] [class~="text-rose-200"],
-html.light [class~="bg-[#050505]"][class~="text-rose-200"],
-html.light [class~="bg-[#050505]"] [class~="text-rose-200"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-rose-200"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-rose-200"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-rose-200"] {
   color: #fecdd3;
 }
 
-html.light [class*="bg-black"][class~="text-rose-400"],
-html.light [class*="bg-black"] [class~="text-rose-400"],
-html.light [class~="bg-[#050505]"][class~="text-rose-400"],
-html.light [class~="bg-[#050505]"] [class~="text-rose-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-rose-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-rose-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-rose-400"] {
   color: #fb7185;
 }
 
-html.light [class*="bg-black"][class~="text-red-300"],
-html.light [class*="bg-black"] [class~="text-red-300"],
-html.light [class~="bg-[#050505]"][class~="text-red-300"],
-html.light [class~="bg-[#050505]"] [class~="text-red-300"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-red-300"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-red-300"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-red-300"] {
   color: #fca5a5;
 }
 
-html.light [class*="bg-black"][class~="text-red-400"],
-html.light [class*="bg-black"] [class~="text-red-400"],
-html.light [class~="bg-[#050505]"][class~="text-red-400"],
-html.light [class~="bg-[#050505]"] [class~="text-red-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-red-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-red-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-red-400"] {
   color: #f87171;
 }
 
-html.light [class*="bg-black"][class~="text-blue-400"],
-html.light [class*="bg-black"] [class~="text-blue-400"],
-html.light [class~="bg-[#050505]"][class~="text-blue-400"],
-html.light [class~="bg-[#050505]"] [class~="text-blue-400"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-blue-400"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-blue-400"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-blue-400"] {
   color: #60a5fa;
 }
 
@@ -1148,55 +1749,108 @@ html.light [class~="bg-yellow-400"][class~="text-white/75"],
 html.light [class~="bg-yellow-400"] [class~="text-white/75"],
 html.light [class~="bg-yellow-400"][class~="text-white/70"],
 html.light [class~="bg-yellow-400"] [class~="text-white/70"],
-html.light [class~="bg-[#050505]"][class~="text-white"],
-html.light [class~="bg-[#050505]"] [class~="text-white"],
-html.light [class~="bg-[#050505]"][class~="text-white/90"],
-html.light [class~="bg-[#050505]"] [class~="text-white/90"],
-html.light [class~="bg-[#050505]"][class~="text-white/80"],
-html.light [class~="bg-[#050505]"] [class~="text-white/80"],
-html.light [class~="bg-[#050505]"][class~="text-white/75"],
-html.light [class~="bg-[#050505]"] [class~="text-white/75"],
-html.light [class~="bg-[#050505]"][class~="text-white/70"],
-html.light [class~="bg-[#050505]"] [class~="text-white/70"],
-html.light [class*="bg-black"][class~="text-white"],
-html.light [class*="bg-black"] [class~="text-white"],
-html.light [class*="bg-black"][class~="text-white/90"],
-html.light [class*="bg-black"] [class~="text-white/90"],
-html.light [class*="bg-black"][class~="text-white/80"],
-html.light [class*="bg-black"] [class~="text-white/80"],
-html.light [class*="bg-black"][class~="text-white/75"],
-html.light [class*="bg-black"] [class~="text-white/75"],
-html.light [class*="bg-black"][class~="text-white/70"],
-html.light [class*="bg-black"] [class~="text-white/70"],
-html.light [class*="from-black/"][class~="text-white"],
-html.light [class*="from-black/"] [class~="text-white"],
-html.light [class*="from-black/"][class~="text-white/90"],
-html.light [class*="from-black/"] [class~="text-white/90"],
-html.light [class*="from-black/"][class~="text-white/80"],
-html.light [class*="from-black/"] [class~="text-white/80"],
-html.light [class*="from-black/"][class~="text-white/75"],
-html.light [class*="from-black/"] [class~="text-white/75"],
-html.light [class*="from-black/"][class~="text-white/70"],
-html.light [class*="from-black/"] [class~="text-white/70"],
-html.light [class*="to-black"][class~="text-white"],
-html.light [class*="to-black"] [class~="text-white"],
-html.light [class*="to-black"][class~="text-white/90"],
-html.light [class*="to-black"] [class~="text-white/90"],
-html.light [class*="to-black"][class~="text-white/80"],
-html.light [class*="to-black"] [class~="text-white/80"],
-html.light [class*="to-black"][class~="text-white/75"],
-html.light [class*="to-black"] [class~="text-white/75"],
-html.light [class*="to-black"][class~="text-white/70"],
-html.light [class*="to-black"] [class~="text-white/70"],
-html.light [class*="via-black"][class~="text-white"],
-html.light [class*="via-black"] [class~="text-white"],
-html.light [class*="via-black"][class~="text-white/90"],
-html.light [class*="via-black"] [class~="text-white/90"],
-html.light [class*="via-black"][class~="text-white/80"],
-html.light [class*="via-black"] [class~="text-white/80"],
-html.light [class*="via-black"][class~="text-white/75"],
-html.light [class*="via-black"] [class~="text-white/75"],
-html.light [class*="via-black"][class~="text-white/70"],
-html.light [class*="via-black"] [class~="text-white/70"] {
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/90"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/90"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/80"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/80"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/75"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/75"],
+html.light [class~="bg-black"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/95"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/80"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/75"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/70"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/60"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/50"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black/40"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="from-black/80"]:not([class~="fixed"])[class~="text-white/70"],
+html.light [class~="bg-black"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/95"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/80"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/75"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/70"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/60"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/50"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="bg-black/40"]:not([class~="fixed"]) [class~="text-white/70"],
+html.light [class~="from-black/80"]:not([class~="fixed"]) [class~="text-white/70"] {
   color: #ffffff;
+}
+
+/* Faint black washes (hover scrims, admin info boxes) follow the theme */
+html.light .bg-black\/15 {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+html.light .bg-black\/20 {
+  background-color: rgba(15, 23, 42, 0.07);
+}
+
+html.light .bg-black\/30 {
+  background-color: rgba(15, 23, 42, 0.09);
 }
