@@ -78,11 +78,10 @@ import { toPlaybackUrl } from "../lib/video/playback";
 import {
   findManagerLink,
   hasManagerLink,
-  managerHandle,
   managerLinkText,
-  managerLinkUrl,
   setManagerTelegram,
   splitManagerLinks,
+  MANAGER_REDIRECT_PATH,
 } from "../lib/manager";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { CallBlockedScreen } from "./CallBlockedScreen";
@@ -2814,15 +2813,24 @@ export default function CallSession() {
                                 segment.link ? (
                                   <a
                                     key={idx}
-                                    href={segment.link.url}
+                                    // The handle is never shown: the label is
+                                    // masked and the href is an internal
+                                    // redirect, so hover / long-press / copy
+                                    // link cannot reveal it either.
+                                    href={MANAGER_REDIRECT_PATH}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="underline font-bold text-sky-300 hover:text-sky-200 transition-colors"
+                                    title="Message my manager on Telegram"
+                                    aria-label="Message my manager on Telegram"
+                                    className="inline-flex items-baseline gap-0.5 font-bold text-sky-300 underline decoration-sky-400/70 decoration-dotted underline-offset-2 hover:text-sky-200 hover:decoration-solid transition-colors cursor-pointer"
                                   >
-                                    {segment.text}
+                                    {segment.display}
+                                    <span aria-hidden="true" className="text-[0.85em] text-sky-400/80">
+                                      ↗
+                                    </span>
                                   </a>
                                 ) : (
-                                  <span key={idx}>{segment.text}</span>
+                                  <span key={idx}>{segment.display}</span>
                                 )
                               )}
                             </span>
@@ -2834,17 +2842,16 @@ export default function CallSession() {
                     {/* Quick-action button if message contains manager telegram link */}
                     {m.role === "assistant" && !!findManagerLink(m.content) && (
                       <a
-                        href={findManagerLink(m.content)?.url || managerLinkUrl()}
+                        href={MANAGER_REDIRECT_PATH}
                         target="_blank"
                         rel="noopener noreferrer"
+                        title="Message my manager on Telegram"
                         className="mt-2.5 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-200 text-[11px] font-medium transition-all shadow-sm group/btn cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5 truncate">
                           <Send className="w-3.5 h-3.5 text-sky-400 group-hover/btn:scale-110 transition-transform shrink-0" />
                           <span className="truncate font-semibold">
-                            {`Contact Manager on Telegram (@${
-                              findManagerLink(m.content)?.handle || managerHandle()
-                            })`}
+                            Message my manager on Telegram
                           </span>
                         </span>
                         <ArrowRight className="w-3.5 h-3.5 text-sky-400/80 group-hover/btn:translate-x-0.5 transition-transform shrink-0" />
