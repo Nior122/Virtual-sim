@@ -40,6 +40,8 @@ import {
   configureManagerTelegram,
   hasManagerLink,
   managerLinkText,
+  managerLinkUrl,
+  MANAGER_REDIRECT_PATH,
 } from "./src/lib/manager";
 import { evaluateMiniTaskAgent } from "./src/utils/taskAgent";
 import { toPlaybackUrl } from "./src/lib/video/playback";
@@ -130,6 +132,12 @@ async function syncSitemapFile(): Promise<void> {
 app.use(express.json());
 
 // Health check endpoint
+// Same masking as the deployed Pages Function: the chat links here, never at
+// t.me/<handle>, so the bot name stays out of the visible text and the URL bar.
+app.get(MANAGER_REDIRECT_PATH, (_req, res) => {
+  res.redirect(302, managerLinkUrl());
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });

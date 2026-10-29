@@ -32,6 +32,18 @@ export const DEFAULT_MANAGER_HANDLE = "KasiQueenbot";
 /** Placeholder inside canned replies; replaced by `fillManagerLink()`. */
 export const MANAGER_LINK_TOKEN = "{link}";
 
+/**
+ * What the chat shows instead of the link.
+ *
+ * Guests never see the bot's handle: the anchor reads `@manager` and points at
+ * the internal `/manager` redirect, so neither the visible text nor the URL in
+ * the status bar / long-press / "copy link" reveals it.
+ */
+export const MANAGER_MASK_LABEL = "@manager";
+
+/** Internal path that redirects to the manager's Telegram chat. */
+export const MANAGER_REDIRECT_PATH = "/manager";
+
 /** Anything that can carry the deployment variable (Pages env, process.env). */
 export type ManagerEnvLike = { MANAGER_TELEGRAM?: string | null } | null | undefined;
 
@@ -96,6 +108,19 @@ export function managerMention(): string {
   return `@${managerHandle()}`;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Every shape the handle leaks in: a `t.me/…` link (any handle, so old messages
+ * still mask) or the current `@handle` mention, which the model sometimes writes
+ * instead of the URL.
+ */
+function linkSplitSource(): string {
+  return `(?:(?:https?:\\/\\/)?t\\.me\\/[A-Za-z0-9_]{4,64}|@${escapeRegExp(managerHandle())}(?![A-Za-z0-9_]))`;
+}
+
 /**
  * True when the text already links to the manager. Used as a guard before
  * appending the link to an AI reply, so a reply is never given the link twice.
@@ -116,12 +141,12 @@ export interface ManagerLink {
 }
 
 const LINK_SOURCE = "(?:https?:\\/\\/)?t\\.me\\/([A-Za-z0-9_]{4,64})";
-/**
- * Same pattern with no inner group: `String.split` keeps every capture group in
- * its output, so an inner one would repeat the handle as its own segment and the
- * chat would render the link twice.
+/*
+ * The split pattern has no capture group of its own: `String.split` keeps every
+ * capture group in its output, so an inner one would repeat the handle as its
+ * own segment and the chat would render the link twice. That is why the pattern
+ * is built by `linkSplitSource()` and wrapped in a single group by the caller.
  */
-const LINK_SPLIT_SOURCE = "(?:https?:\\/\\/)?t\\.me\\/[A-Za-z0-9_]{4,64}";
 
 /**
  * First `t.me/…` link in the text, whatever the handle. The chat renders the
@@ -131,14 +156,24 @@ const LINK_SPLIT_SOURCE = "(?:https?:\\/\\/)?t\\.me\\/[A-Za-z0-9_]{4,64}";
 export function findManagerLink(text?: string | null): ManagerLink | null {
   if (!text) return null;
   const match = new RegExp(LINK_SOURCE, "i").exec(text);
-  if (!match) return null;
-  return { text: match[0], handle: match[1], url: `https://t.me/${match[1]}` };
+  if (match) {
+    return { text: match[0], handle: match[1], url: `https://t.me/${match[1]}` };
+  }
+  // The model sometimes writes "@Handle" instead of the link.
+  const mention = new RegExp(`@${escapeRegExp(managerHandle())}(?![A-Za-z0-9_])`, "i").exec(text);
+  if (mention) {
+    return { text: mention[0], handle: managerHandle(), url: `https://t.me/${managerHandle()}` };
+  }
+  return null;
 }
 
 export interface ManagerLinkSegment {
+  /** The original text (the link is still here, guards need it). */
   text: string;
   /** Set when this segment is a link; null for ordinary text. */
   link: ManagerLink | null;
+  /** What the chat renders: the masked label for a link, the text otherwise. */
+  display: string;
 }
 
 /**
@@ -147,15 +182,24 @@ export interface ManagerLinkSegment {
  */
 export function splitManagerLinks(text: string): ManagerLinkSegment[] {
   if (!text) return [];
-  const parts = text.split(new RegExp(`(${LINK_SPLIT_SOURCE})`, "gi"));
+  const source = linkSplitSource();
+  const parts = text.split(new RegExp(`(${source})`, "gi"));
   return parts
     .filter((part) => part !== "")
-    .map((part) => ({
-      text: part,
-      link: new RegExp(`^${LINK_SOURCE}$`, "i").test(part)
-        ? findManagerLink(part)
-        : null,
-    }));
+    .map((part) => {
+      const link = new RegExp(`^${source}$`, "i").test(part) ? findManagerLink(part) : null;
+      return { text: part, link, display: link ? MANAGER_MASK_LABEL : part };
+    });
+}
+
+/**
+ * The message as a guest reads it: every manager link (URL or `@handle`)
+ * replaced by the masked label. Pure, so it can be checked without a browser.
+ */
+export function maskManagerLinks(text: string): string {
+  return splitManagerLinks(text)
+    .map((segment) => segment.display)
+    .join("");
 }
 
 /**

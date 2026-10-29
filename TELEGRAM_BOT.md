@@ -487,7 +487,7 @@ Set in Pages → project → Settings → Environment variables (Production):
 | `ADMIN_PASSWORD` | Optional. Password for the `/admin` web backend (min 6 chars). Unset = the backend is disabled. See [ADMIN_PANEL.md](ADMIN_PANEL.md) |
 | `ADMIN_SESSION_HOURS` | Optional. Admin login lifetime in hours (default 12, max 168) |
 | `ADMIN_SESSION_SECRET` | Optional. Extra signing entropy for the admin session cookie |
-| `MANAGER_TELEGRAM` | Optional. The manager's Telegram handle guests are sent to (`KasiQueenbot`, `@KasiQueenbot` or a full `https://t.me/…` URL). Unset = the default in `src/lib/manager.ts` |
+| `MANAGER_TELEGRAM` | Optional. The manager's Telegram handle guests are sent to (`KasiQueenbot`, `@KasiQueenbot` or a full `https://t.me/…` URL). Unset = the default in `src/lib/manager.ts`. Guests never see this handle: the chat shows a clickable **@manager** and links to `/manager`, which redirects to Telegram |
 
 > No model ID is hardcoded anywhere. A provider is skipped (and reported in
 > `/chatcheck`) when its key or its model variable is missing.

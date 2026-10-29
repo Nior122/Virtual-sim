@@ -34,6 +34,7 @@ const FEATURES = [
   "manager-handle-config",
   "varied-call-pickup",
   "photo-caption-guarantee",
+  "masked-manager-link",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
