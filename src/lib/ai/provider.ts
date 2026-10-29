@@ -2,6 +2,14 @@ import { Persona, ChatMessage } from "../../types";
 import { buildPersonaContext } from "./persona-context";
 import { managerLinkText } from "../manager";
 import {
+  PHOTO_REPLY_CAPTIONS,
+  VIDEO_REQUEST_IMAGE_CAPTIONS,
+  getAdultPictureManagerRejectionMessage,
+  isAdultPictureRequest,
+  isMediaOrImageRequest,
+  isVideoRequest,
+} from "../../utils/mediaRequest";
+import {
   describeProvider,
   probeProviders,
   providerStatus,
@@ -25,6 +33,31 @@ export type { ProviderProbe };
 export const OFFLINE_ENGINE = "Dreamgirl Engine";
 
 /**
+ * Lines for the offline fallback when nothing specific matched. They keep the
+ * conversation open without repeating the user's own sentence, and none of them
+ * claims to have done something (sent a photo, made a call).
+ */
+const OPEN_REPLIES = [
+  "Mmm keep talking, I'm listening 😏 What else?",
+  "You're cute, you know that? 😉 What are you up to right now?",
+  "Hmm you've got my attention now 🙈 Go on...",
+  "That's interesting 😊 What made you think of it?",
+  "I'm enjoying this 🙈 What's the rest of your day looking like?",
+  "Ooh 😏 Tell me something I don't know about you.",
+];
+
+const OPEN_QUESTION_ACKS = [
+  "Mmm good question 😏 What do you think?",
+  "Hmm let me think about that one 😅 What's your answer?",
+  "Ooh, you're testing me 😏 What would you say?",
+  "I have my own answer to that 😉 But tell me yours first.",
+];
+
+function pickCaption(list: string[]): string {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+/**
  * Offline answer used only when every AI provider is unavailable.
  *
  * It used to return one of five random greetings no matter what was asked —
@@ -39,7 +72,7 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
 
   // Socials / Manager / Dates (kept exactly as before)
   if (
-    /social|instagram|ig|snap|snapchat|telegram|whatsapp|phone|number|digits|date|meet|meetup|dinner|drinks/i.test(
+    /\b(social|instagram|ig|snap(?:chat)?|telegram|whatsapp|phone|numbers?|digits|dates?|meet(?:up)?|dinner|drinks|manager)\b/i.test(
       text
     )
   ) {
@@ -49,6 +82,19 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
   // Are you a bot / Prove it / Call (kept exactly as before)
   if (/bot|real|fake|ai|robot|prove/i.test(text)) {
     return `Haha excuse me?! 😂 I'm 100% real babe. Let me call you right now! 📞`;
+  }
+
+  // A photo request is answered with a caption, because the client attaches the
+  // image to whatever this returns. Without this the picture arrived under a
+  // generic "Tell me more about …" line, which read as a broken bot.
+  if (isAdultPictureRequest(text)) {
+    return getAdultPictureManagerRejectionMessage(persona.name, lastUserMessage);
+  }
+  if (isVideoRequest(text)) {
+    return pickCaption(VIDEO_REQUEST_IMAGE_CAPTIONS);
+  }
+  if (isMediaOrImageRequest(text)) {
+    return pickCaption(PHOTO_REPLY_CAPTIONS);
   }
 
   // Direct questions about the persona are answerable from the record.
@@ -81,12 +127,13 @@ function getLocalFallbackResponse(persona: Persona, lastUserMessage: string): st
     return `Don't stay away too long 😉 Goodnight.`;
   }
 
-  // Nothing matched: still respond to what they said instead of a random line.
-  const topic = lastUserMessage.replace(/\s+/g, " ").trim().slice(0, 60);
+  // Nothing matched: react and keep the conversation going. The raw text is not
+  // quoted back any more — a truncated copy of the user's own message
+  // (`Tell me more about "Another picture....`) is what looked broken.
   if (lastUserMessage.includes("?")) {
-    return `Mmm good question 😏 ${topic.replace(/\?+$/, "")} — tell me what you think first.`;
+    return pickCaption(OPEN_QUESTION_ACKS);
   }
-  return `Mmm I like that 😊 Tell me more about "${topic}".`;
+  return pickCaption(OPEN_REPLIES);
 }
 
 /**

@@ -33,6 +33,7 @@ const FEATURES = [
   "preview-media-buttons",
   "manager-handle-config",
   "varied-call-pickup",
+  "photo-caption-guarantee",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

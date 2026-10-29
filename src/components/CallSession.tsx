@@ -1675,6 +1675,19 @@ export default function CallSession() {
             finalContent = PHOTO_LIMIT_EXCEEDED_MESSAGES[Math.floor(Math.random() * PHOTO_LIMIT_EXCEEDED_MESSAGES.length)];
           } else if (isVideoReq && !hasReachedPhotoLimit && !/photo|pic|picture|selfie|image/i.test(finalContent)) {
             finalContent = VIDEO_REQUEST_IMAGE_CAPTIONS[Math.floor(Math.random() * VIDEO_REQUEST_IMAGE_CAPTIONS.length)];
+          } else if (
+            // A picture is attached to this reply, so the line under it has to be
+            // about that picture. Without this a generic reply (the offline
+            // "Tell me more about …" line, or an answer to a different question)
+            // ended up sitting on top of the photo. Manager/adult messages keep
+            // their own wording — their branches run above.
+            (profileImageAttachment || data.attachmentUrl) &&
+            !hasManagerLink(finalContent) &&
+            // Quoted text is the user's own words echoed back, not the reply
+            // talking about the photo ("Tell me more about \"another picture\"").
+            !/photo|pic|picture|selfie|image|here|look|see/i.test(finalContent.replace(/"[^"]*"/g, " "))
+          ) {
+            finalContent = PHOTO_REPLY_CAPTIONS[Math.floor(Math.random() * PHOTO_REPLY_CAPTIONS.length)];
           }
 
           // Images sent on regular media requests or adult picture requests; never on pure text adult words, calls, or social requests
