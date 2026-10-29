@@ -815,6 +815,10 @@ app.post("/api/chat", async (req, res) => {
       else if (isVideoReq && !hasReachedPhotoLimit && !/photo|pic|picture|selfie|image/i.test(content)) {
         content = VIDEO_REQUEST_IMAGE_CAPTIONS[Math.floor(Math.random() * VIDEO_REQUEST_IMAGE_CAPTIONS.length)];
       }
+      // 8. A picture is attached to this reply, so the line under it has to be about it
+      else if (attachedProfileImage && !hasManagerLink(content) && !/photo|pic|picture|selfie|image|here|look|see/i.test(content.replace(/"[^"]*"/g, " "))) {
+        content = PHOTO_REPLY_CAPTIONS[Math.floor(Math.random() * PHOTO_REPLY_CAPTIONS.length)];
+      }
       
       res.json({
         message: content,
