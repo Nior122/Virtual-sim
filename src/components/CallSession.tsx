@@ -67,6 +67,13 @@ import {
 } from "../utils/mediaRequest";
 import { evaluateMiniTaskAgent, getRandomMissedOrRejectedCallMessage } from "../utils/taskAgent";
 import { fetchCallAccess, postConnectedCall, type CallAccessState } from "../lib/calls/client";
+import {
+  RINGBACK_START_MS,
+  getMissedCallFollowUp,
+  incomingAnswerPlan,
+  planPickup,
+  type PickupPlan,
+} from "../lib/calls/pickup";
 import { toPlaybackUrl } from "../lib/video/playback";
 import {
   findManagerLink,
@@ -158,6 +165,11 @@ export default function CallSession() {
   const nextVideoTimeoutRef = useRef<any>(null);
   const videoSafetyTimeoutRef = useRef<any>(null);
   const pickupDelayTimeoutRef = useRef<any>(null);
+  const ringStartTimeoutRef = useRef<any>(null);
+  /** The ringing plan for the call in progress (see src/lib/calls/pickup.ts). */
+  const pickupPlanRef = useRef<PickupPlan | null>(null);
+  /** True when the last call rang out unanswered — changes the ended screen. */
+  const [missedCall, setMissedCall] = useState(false);
   const missedCallTypingTimeoutRef = useRef<any>(null);
   const missedCallMessageTimeoutRef = useRef<any>(null);
   const [chatOpen, setChatOpen] = useState(isChatParam);
@@ -255,10 +267,39 @@ export default function CallSession() {
   };
 
   const stopRinging = () => {
+    if (ringStartTimeoutRef.current) {
+      clearTimeout(ringStartTimeoutRef.current);
+      ringStartTimeoutRef.current = null;
+    }
     if (ringIntervalRef.current !== null) {
       clearInterval(ringIntervalRef.current);
       ringIntervalRef.current = null;
     }
+  };
+
+  /**
+   * Dials: the line stays quiet for a moment before the first ringback tone, so
+   * an instant pickup (see `planPickup`) never beeps over her greeting. A plan
+   * that answers before the first ring never plays one at all. Every
+   * stopRinging() cancels the pending start, so a call that ends early is silent.
+   */
+  const scheduleRinging = (plan?: PickupPlan | null) => {
+    stopRinging();
+    if (plan && plan.answerAfterMs !== null && plan.answerAfterMs <= RINGBACK_START_MS) {
+      return;
+    }
+    ringStartTimeoutRef.current = setTimeout(() => {
+      ringStartTimeoutRef.current = null;
+      if (hasPickedUp.current) return;
+      if (
+        callStateRef.current === "ENDED" ||
+        callStateRef.current === "ENDING" ||
+        callStateRef.current === "USER_BUSY"
+      ) {
+        return;
+      }
+      startRinging();
+    }, RINGBACK_START_MS);
   };
 
   const playPickup = () => {
@@ -756,10 +797,25 @@ export default function CallSession() {
   const startCall = async (overridePersona?: Persona | null, isAnsweringIncoming = false) => {
     const targetPersona = overridePersona || persona;
     countedCallRef.current = false;
+    setMissedCall(false);
+    // Redialling straight after a missed call: her apology text would land in
+    // the middle of the new call, so the pending timers are dropped.
+    if (missedCallTypingTimeoutRef.current) {
+      clearTimeout(missedCallTypingTimeoutRef.current);
+      missedCallTypingTimeoutRef.current = null;
+    }
+    if (missedCallMessageTimeoutRef.current) {
+      clearTimeout(missedCallMessageTimeoutRef.current);
+      missedCallMessageTimeoutRef.current = null;
+    }
     callStateRef.current = "CONNECTING";
     setCallState("CONNECTING");
+    // One plan per call, drawn as the dial starts: it decides the ringback and
+    // how long the phone rings before she appears — or whether she ever does.
+    const plan = isAnsweringIncoming ? incomingAnswerPlan() : planPickup();
+    pickupPlanRef.current = plan;
     if (!isAnsweringIncoming) {
-      startRinging();
+      scheduleRinging(plan);
     } else {
       stopRinging();
       playPickup();
@@ -801,7 +857,7 @@ export default function CallSession() {
       setIsCameraStarting(false);
     }
 
-    startCallSession(isAnsweringIncoming, targetPersona || undefined);
+    startCallSession(isAnsweringIncoming, targetPersona || undefined, plan);
   };
 
   const triggerUserBusy = () => {
@@ -915,7 +971,11 @@ export default function CallSession() {
       .catch(() => undefined);
   };
 
-  const startCallSession = (isAnsweringIncoming = false, targetPersonaParam?: Persona) => {
+  const startCallSession = (
+    isAnsweringIncoming = false,
+    targetPersonaParam?: Persona,
+    planParam?: PickupPlan
+  ) => {
     const targetPersona = targetPersonaParam || persona;
     if (!targetPersona) return;
 
@@ -944,23 +1004,44 @@ export default function CallSession() {
       ringingTimeoutRef.current = null;
     }
 
-    // 30 Seconds Ringing Timeout: if phone rings > 30s without video loading (network error/delay) -> User Busy
+    // The plan drawn when the dial started: she may pick up instantly, after any
+    // number of rings, or not at all (see src/lib/calls/pickup.ts). Answering
+    // her incoming call is the one case with no wait.
+    const plan =
+      planParam || pickupPlanRef.current || (isAnsweringIncoming ? incomingAnswerPlan() : planPickup());
+    pickupPlanRef.current = plan;
+    console.log(`[CALL] Phone ringing... pickup plan: ${plan.label}`);
+
+    // Watchdog. For an answered call it only fires when the stream never starts
+    // (network problem) -> User Busy, with the answer delay + grace allowed so a
+    // slow pickup is not cut off. For a missed call it is the end of the ring.
     ringingTimeoutRef.current = setTimeout(() => {
-      if (!hasPickedUp.current && callStateRef.current !== "ENDED" && callStateRef.current !== "ENDING" && callStateRef.current !== "USER_BUSY") {
-        console.warn("[CALL] Ringing timed out after 30 seconds without video loading -> User Busy");
-        triggerUserBusy();
+      if (
+        hasPickedUp.current ||
+        callStateRef.current === "ENDED" ||
+        callStateRef.current === "ENDING" ||
+        callStateRef.current === "USER_BUSY"
+      ) {
+        return;
       }
-    }, 30000);
+      if (plan.missed) {
+        handleMissedPickup();
+        return;
+      }
+      console.warn(`[CALL] No video after ${(plan.ringMs / 1000).toFixed(1)}s of ringing -> User Busy`);
+      triggerUserBusy();
+    }, plan.ringMs);
 
-    if (validVideos.length > 0) {
-      const pickupDelay = isAnsweringIncoming
-        ? 1000
-        : Math.floor(Math.random() * (3000 - 1500 + 1)) + 1500;
-
-      console.log(`[CALL] Phone ringing... Pickup scheduled in ${(pickupDelay / 1000).toFixed(1)}s`);
-
+    if (validVideos.length > 0 && plan.answerAfterMs !== null) {
+      const pickupDelay = plan.answerAfterMs;
       pickupDelayTimeoutRef.current = setTimeout(() => {
-        if (callStateRef.current === "ENDED" || callStateRef.current === "ENDING" || callStateRef.current === "USER_BUSY") return;
+        if (
+          callStateRef.current === "ENDED" ||
+          callStateRef.current === "ENDING" ||
+          callStateRef.current === "USER_BUSY"
+        ) {
+          return;
+        }
         pickNextVideo(validVideos, null);
       }, pickupDelay);
     } else {
@@ -1180,6 +1261,77 @@ export default function CallSession() {
     // 4. Stop audio cues and ringtone
     stopRinging();
     playHangup();
+  };
+
+  /**
+   * She never picked up.
+   *
+   * The phone rang out (40–50 s, see `planPickup`), so the call ends like a real
+   * missed call: the ringing stops, the ended screen says what happened, and a
+   * few seconds later she texts an apology in the chat — the way a person who
+   * saw the missed call would. No call is counted, so the client loses nothing.
+   */
+  const handleMissedPickup = () => {
+    if (
+      callStateRef.current === "ENDED" ||
+      callStateRef.current === "ENDING" ||
+      callStateRef.current === "USER_BUSY"
+    ) {
+      return;
+    }
+    const plan = pickupPlanRef.current;
+    console.warn(
+      `[CALL] Ringing ended with no answer after ${plan ? (plan.ringMs / 1000).toFixed(1) : "?"}s -> missed call`
+    );
+
+    if (pickupDelayTimeoutRef.current) {
+      clearTimeout(pickupDelayTimeoutRef.current);
+      pickupDelayTimeoutRef.current = null;
+    }
+    if (ringingTimeoutRef.current) {
+      clearTimeout(ringingTimeoutRef.current);
+      ringingTimeoutRef.current = null;
+    }
+    if (videoSafetyTimeoutRef.current) {
+      clearTimeout(videoSafetyTimeoutRef.current);
+      videoSafetyTimeoutRef.current = null;
+    }
+
+    setMissedCall(true);
+    endCall();
+    scheduleMissedCallMessage();
+  };
+
+  /**
+   * Her apology for the missed call: "typing" appears in the chat first, then the
+   * message lands, so it reads as a person who just noticed the notification.
+   */
+  const scheduleMissedCallMessage = () => {
+    if (missedCallTypingTimeoutRef.current) {
+      clearTimeout(missedCallTypingTimeoutRef.current);
+      missedCallTypingTimeoutRef.current = null;
+    }
+    if (missedCallMessageTimeoutRef.current) {
+      clearTimeout(missedCallMessageTimeoutRef.current);
+      missedCallMessageTimeoutRef.current = null;
+    }
+
+    missedCallTypingTimeoutRef.current = setTimeout(() => {
+      setIsTyping("typing");
+      missedCallMessageTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-missed-call`,
+            role: "assistant",
+            content: getMissedCallFollowUp(),
+            timestamp: new Date(),
+            reactions: [],
+          },
+        ]);
+      }, 2800);
+    }, 6000);
   };
 
   const handleAcceptIncomingCall = () => {
@@ -2253,15 +2405,28 @@ export default function CallSession() {
                   </div>
                 </div>
 
-                <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Call Ended</h2>
+                <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">
+                  {missedCall ? "Missed Call" : "Call Ended"}
+                </h2>
                 <p className="text-neutral-400 mb-3 text-center">
-                  Your conversation with {persona?.name || "the persona"} has ended.
+                  {missedCall
+                    ? `${persona?.name || "She"} didn't pick up this time. She may text you back.`
+                    : `Your conversation with ${persona?.name || "the persona"} has ended.`}
                 </p>
                 <p className="mb-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-neutral-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Timer className="h-3.5 w-3.5" />
-                    {callAccess?.limits.cooldownHours ?? 2}h before you can call {persona?.name || "her"} again
-                  </span>
+                  {missedCall ? (
+                    // A call that was never answered does not use a slot, so
+                    // there is no cooldown to announce.
+                    <span className="inline-flex items-center gap-1.5">
+                      <PhoneOff className="h-3.5 w-3.5" />
+                      No call slot was used — you can call {persona?.name || "her"} again right away
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Timer className="h-3.5 w-3.5" />
+                      {callAccess?.limits.cooldownHours ?? 2}h before you can call {persona?.name || "her"} again
+                    </span>
+                  )}
                   {callAccess && (
                     <span className="text-neutral-600">·</span>
                   )}

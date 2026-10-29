@@ -32,6 +32,7 @@ const FEATURES = [
   "bulk-video-remove",
   "preview-media-buttons",
   "manager-handle-config",
+  "varied-call-pickup",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
