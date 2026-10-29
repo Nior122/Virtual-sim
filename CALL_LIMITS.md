@@ -58,12 +58,51 @@ One call per profile every 2 hours, 5 calls every 5 hours.
 clock** (`now` in the API answer), so a device with the wrong time cannot show
 a misleading wait.
 
+## How long it rings (ringing and pickup)
+
+Every call used to connect after the same ~1.5–3 s, which made the ring look
+like a loading spinner. `src/lib/calls/pickup.ts` now draws one plan per call and
+`CallSession` follows it:
+
+| Outcome | Rings for | Share of calls |
+|---|---|---|
+| instantly | ~0.2–0.9 s (she was holding the phone — no ringback at all) | 6% |
+| quickly | ~2–5 s | 12% |
+| normal | ~5 s | 15% |
+| normal | ~10 s | 15% |
+| normal | ~15 s | 13% |
+| slowly | ~20 s | 13% |
+| slowly | ~25 s | 8% |
+| very slowly | ~30 s | 10% |
+| **missed** | **40–50 s, then the call ends** | 8% |
+
+```
+Missed Call
+Emarrb didn't pick up this time. She may text you back.
+📞 No call slot was used — you can call Emarrb again right away
+[ Message ]  [ Call Again ]  [ View Profile ]
+```
+
+Six seconds after a missed call she starts typing and apologises in the chat
+("my phone was in the other room 😩 call me back?"), the way a person who saw
+the missed call would. Calling again is instant — a missed call uses no slot and
+starts no cooldown.
+
+A slow answer is never reported as a busy line: the watchdog waits for the
+planned pickup **plus a 12 s grace** for the stream to buffer. It only ends a
+call as *User Busy* when she should already have appeared and no video ever
+started, and it rings out after 40–50 s when the plan is a missed call.
+
+The first ~0.9 s of the line are silent, so an instant pickup never beeps the
+ringback tone over her greeting.
+
 ## When a call counts
 
 A call is counted **when the persona's video actually starts playing**, not when
 the screen opens and not while it rings. A call that never connects — a network
-error, a dead stream, the 30-second ringing timeout — costs nothing, so a bad
-connection cannot burn a client's allowance.
+error, a dead stream, a missed call that rang out — costs nothing, so a bad
+connection (or a phone she did not reach in time) cannot burn a client's
+allowance.
 
 A call is counted once. Re-rendering, seeking, or the next clip in the same call
 never charges twice.
