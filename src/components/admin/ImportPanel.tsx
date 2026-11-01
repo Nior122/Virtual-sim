@@ -157,8 +157,9 @@ export default function ImportPanel() {
           )}
         </div>
         <p className="text-[11px] text-neutral-500 mt-3">
-          Preparing opens the page, verifies every image is a real JPEG, collects
-          playable videos and writes the profile text with your AI provider.
+          Preparing opens the page, checks every image (and converts WebP/PNG
+          links to JPEG where the CDN allows it), collects playable videos and
+          writes the profile text with your AI provider.
           Up to 25 URLs; each one is prepared separately so a slow page does not
           block the others.
         </p>
