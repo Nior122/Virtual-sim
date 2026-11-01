@@ -618,13 +618,19 @@ export default function AdvertsPanel() {
               ))}
             </Select>
           </Field>
+          <p className="text-[11px] text-neutral-500 mt-2 leading-relaxed">
+            The banner is placed bare: no “Advertisement” label, no border, no
+            background, no shadow. Whatever frame you see comes from the network's
+            own creative.
+          </p>
           {(draft.native.position === "fixed-bottom" ||
             draft.native.position === "fixed-top") && (
             <div className="mt-2">
               <Notice kind="warn">
-                A pinned banner sits on top of the page. On the chat screen it can
-                cover the message box on small phones — visitors can dismiss it with
-                the ✕, and it stays dismissed for that session.
+                A pinned banner sits on the page instead of flowing with it. It now
+                has no border, background or label — just a discreet corner × so a
+                visitor can clear it off the message box; that dismissal lasts for
+                their session.
               </Notice>
             </div>
           )}

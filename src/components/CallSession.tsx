@@ -75,6 +75,7 @@ import {
   type PickupPlan,
 } from "../lib/calls/pickup";
 import { toPlaybackUrl } from "../lib/video/playback";
+import { pickRotatingVideo, shuffledOrder } from "../lib/video/rotation";
 import {
   findManagerLink,
   hasManagerLink,
@@ -348,6 +349,11 @@ export default function CallSession() {
   const [useIframeFallback, setUseIframeFallback] = useState(false);
   const currentVideoRef = useRef<PersonaVideo | null>(null);
   const initialPersonaVideosRef = useRef<PersonaVideo[]>([]);
+  /**
+   * The clip this call opens with, chosen from the profile's shuffled rotation
+   * (src/lib/video/rotation.ts) instead of index 0 / a fresh coin toss.
+   */
+  const openingVideoRef = useRef<PersonaVideo | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const ringingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -986,8 +992,15 @@ export default function CallSession() {
         ? targetPersona.videos.filter((v) => v && v.url && v.url.trim().length > 0)
         : [];
 
-    initialPersonaVideosRef.current = validVideos;
-    setVideos(validVideos);
+    // The API returns videos in upload order. Rotate instead: a fresh call
+    // takes the next clip off a shuffled deck for this profile, so successive
+    // calls do not replay the same upload and no clip is ever "the first one".
+    const rotationSlug = String(targetPersona.slug || slug || "").trim();
+    openingVideoRef.current = pickRotatingVideo(validVideos, rotationSlug);
+    const rotationOrder: PersonaVideo[] = shuffledOrder(validVideos);
+
+    initialPersonaVideosRef.current = rotationOrder;
+    setVideos(rotationOrder);
 
     setIsRemoteVideoPlaying(false);
     hasPickedUp.current = false;
@@ -1042,7 +1055,7 @@ export default function CallSession() {
         ) {
           return;
         }
-        pickNextVideo(validVideos, null);
+        pickNextVideo(rotationOrder, null);
       }, pickupDelay);
     } else {
       setCurrentVideo(null);
@@ -1074,7 +1087,20 @@ export default function CallSession() {
       }
     }
 
-    const randomVideo = candidates[Math.floor(Math.random() * candidates.length)];
+    // The clip this call was opened with (rotation pick) wins when it is still
+    // among the candidates; recovery picks after a failed stream stay random.
+    const opening = openingVideoRef.current;
+    const openingIndex = opening
+      ? candidates.findIndex(
+          (v) => v === opening || (!!v.id && !!opening.id && v.id === opening.id)
+        )
+      : -1;
+    openingVideoRef.current = null;
+
+    const randomVideo =
+      openingIndex >= 0
+        ? candidates[openingIndex]
+        : candidates[Math.floor(Math.random() * candidates.length)];
     if (!randomVideo) return;
     setUseIframeFallback(false);
     currentVideoRef.current = randomVideo;
