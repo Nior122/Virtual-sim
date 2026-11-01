@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, PlayCircle, Search, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, PlayCircle, Search, XCircle } from "lucide-react";
 import {
   checkVideos,
   diagnose,
@@ -141,10 +141,24 @@ export default function ToolsPanel() {
             )}
 
             {[
-              ["Verified JPEG", diagnostics.probes.filter((probe) => probe.ok)],
-              ["Rejected", diagnostics.probes.filter((probe) => !probe.ok)],
+              ["Verified JPEG", diagnostics.probes.filter((probe) => probe.verdict === "jpeg")],
+              [
+                "Unreachable — kept anyway",
+                diagnostics.probes.filter((probe) => probe.verdict === "blocked"),
+              ],
+              [
+                "Proven unusable",
+                diagnostics.probes.filter(
+                  (probe) => probe.verdict && probe.verdict !== "jpeg" && probe.verdict !== "blocked"
+                ),
+              ],
             ].map(([label, probes]) => {
-              const list = probes as Array<{ url: string; ok: boolean }>;
+              const list = probes as Array<{
+                url: string;
+                ok: boolean;
+                verdict?: string;
+                reason?: string;
+              }>;
               if (list.length === 0) return null;
               return (
                 <div key={String(label)}>
@@ -154,19 +168,28 @@ export default function ToolsPanel() {
                   <ul className="space-y-1">
                     {list.map((probe) => (
                       <li key={probe.url} className="flex items-start gap-2 text-[11px]">
-                        {probe.ok ? (
+                        {probe.verdict === "jpeg" ? (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                        ) : probe.verdict === "blocked" ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-300 mt-0.5 shrink-0" />
                         ) : (
                           <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
                         )}
-                        <a
-                          href={probe.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-neutral-400 break-all hover:text-white"
-                        >
-                          {probe.url}
-                        </a>
+                        <span className="min-w-0">
+                          <a
+                            href={probe.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-neutral-400 break-all hover:text-white"
+                          >
+                            {probe.url}
+                          </a>
+                          {probe.reason && (
+                            <span className="block text-[10px] text-neutral-500">
+                              {probe.reason}
+                            </span>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>

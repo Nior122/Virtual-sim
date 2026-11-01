@@ -553,7 +553,7 @@ is visible in the other immediately.
 | "Wrong password" with the right password | Trailing whitespace in the variable, or you edited the variable without redeploying. The value is trimmed automatically. |
 | Locked out after several attempts | Eight failures per IP in 15 minutes. Wait, or clear the `admin:login:<ip>` key in the KV namespace. |
 | Profile list shows a red database error | `DATABASE_URL` is missing/bad or the Neon project is suspended. The site's public pages show the same failure. |
-| "N image URL(s) are not served as JPEG" | The URL returns WebP/PNG, a redirect to HTML, or a 403. Open the URL in a browser; if it downloads rather than displays, find the `.jpg` variant. |
+| "N image URL(s) are not served as JPEG" | The server *proved* it is not a JPEG (WebP/PNG/GIF bytes, a web page, or 404). Open the URL in a browser; if it downloads rather than displays, find the `.jpg` variant. A 403/429 that the panel cannot reach is **not** reported here — those URLs are kept. |
 | Import says "no JPEG images found" | Run Tools → Diagnose on the same URL. It shows whether images exist, whether they were rejected, or whether the site is serving a bot challenge. |
 | Video saves but does not play | Tools → Check videos. Embeds with no extractable stream are skipped on save; use the direct `.mp4`/`.m3u8` URL instead. |
 | `/admin` answers 404 | Private mode hides it only for people without a session? No — `/admin` is always served. A 404 means the deployment has no `functions/api/admin` (old build) or a proxy is stripping the route. |

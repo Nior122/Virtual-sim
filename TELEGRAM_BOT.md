@@ -235,7 +235,8 @@ The reply distinguishes the causes:
 
 | Reply | Meaning | Fix |
 |---|---|---|
-| `N image URL(s) were rejected…` | the page only offers WebP/PNG, or the JPEG links are dead | the bot already retries `x.webp` → `x.jpg` and `?fm=jpg`, and drops every URL that does not answer as a real JPEG; only working images are stored |
+| `N link(s) skipped: the server proved they are PNG/WebP/dead` | the images genuinely are not JPEGs, or the posts were deleted | open `/diag <url>` — it now prints the verdict and the reason for every candidate (`serves image/webp`, `HTTP 404`, `kept, not verifiable`); try another post page, or add photos with `/image <jpg url>` |
+| `could not be checked from the server` | the CDN refuses the Worker (403/hotlink/bot protection) or the probe budget ran out | nothing to fix: those links are **kept** and work in a normal browser. Confirm with `/diag` — they show as `kept, not verifiable` |
 | `no JPEG images found` with 0 candidates | no image markup at all | the page is built by JavaScript — copy a post/gallery link, or run `/diag <url>` |
 | `The site blocked the request (HTTP 403)` | bot protection | not scrapable from a Worker |
 | `Creator "x" does not exist on coomer.st … Check the spelling` | the link has a typo, or trailing dots were pasted | trailing punctuation is stripped automatically; compare the user name with the site |
@@ -268,11 +269,13 @@ Title: Ava — Model
 <img> tags: 24 · <source> tags: 3
 Image candidates: 12 usable · 8 WebP/PNG
 
+Probe result: 1 JPEG · 0 unreachable (kept) · 0 proven unusable
+
 Candidates found:
 1. https://cdn.site.com/media/9f2a…/1280
-   served as JPEG ✓
+   JPEG ✓ — JPEG bytes
 
-WebP/PNG only (rejected, JPEG variant will be tried):
+WebP/PNG only (a JPEG variant will be tried):
 • https://cdn.site.com/media/aa11….webp
 ```
 
@@ -524,16 +527,43 @@ KV binding: namespace `BOT_KV` bound under Settings → Bindings.
   JSON-LD, `<img>`, `<source srcset>` (largest size), lazy-load attributes
   (`data-src`, `data-original`, `data-srcset`, …), `poster`, CSS
   `background-image` and `data-bg*` thumbnails are all collected, and
-  extensionless CDN URLs are verified with a content-type probe (max 12 probes
-  per scrape). Only URLs the server actually serves as `image/jpeg` are kept.
+  extensionless CDN URLs are verified with a probe (up to 24 per scrape, six
+  at a time). See the next two bullets for what "verified" means now.
 - **Post pages are opened for hidden main images.** Scrapes follow up to
   `detailPages` (default 4, max 6) same-site post/gallery links and pull the
   images and clips from those pages too — that is what fixes sites where the
   main photo only appears after clicking a thumbnail.
-- **Only JPEG images are imported.** PNG/WebP/GIF thumbnails, SVG logos and
-  icons, sprites, favicons and placeholder graphics are discarded (and a
-  non-JPEG link pasted in chat is refused with a message), so a scrape
-  returns the real profile photos and nothing else.
+- **Only JPEG images are imported**, but the check no longer assumes the worst.
+  Each URL gets one of four verdicts (`src/lib/bot/jpeg.ts`):
+  **JPEG** (type or magic bytes prove it), **not a JPEG** (the server really
+  answered WebP/PNG/GIF or a web page), **gone** (404/410/451) and
+  **unreachable** (403/429/5xx, timeout, or the subrequest budget ran out).
+
+  *Unreachable is not a rejection.* A Worker's IP being blocked by a CDN says
+  nothing about the visitor's browser, and treating it as "not a JPEG" was what
+  emptied whole galleries. Those links are kept, placed after the verified
+  ones, and the site hides any image that fails to load (`src/App.tsx`), so a
+  dead link can never show a broken image in a profile.
+
+  Two smaller fixes in the same check:
+
+  - the first request is sent **without a `Referer`**, exactly like the site's
+    own `referrerPolicy="no-referrer"`; a hotlink-protected CDN used to answer
+    the Worker with 403 while the browser loaded the photo fine;
+  - one request per URL instead of HEAD + GET, run **six at a time**, so a slow
+    CDN costs a second instead of the whole deadline.
+
+- **Last resort when a page has no JPEG at all.** If nothing JPEG can be found
+  and the page does have real WebP/PNG pictures, those are used and the reply
+  says so ("this page has no JPEG at all — N WebP/PNG image(s) were used
+  as-is"). Only reachable, verified image files qualify; it is never a silent
+  change of the JPEG-only rule, and it only fires when the alternative is a
+  profile with no photos.
+- **WebP/PNG galleries are converted back to JPEG where the CDN allows it.**
+  Variants tried, in order: `x.webp` → `x.jpg`, `?fm=jpg`, `?format=jpg`,
+  Cloudflare's `auto=format` removed (the same URL then serves JPEG), and
+  WordPress thumbnail sizes collapsed to the full-size file
+  (`photo-1024x768.jpg` → `photo.jpg`).
 - **Video URLs are also read from inline script JSON** (`window.__DATA__` and
   similar state blobs), which is where most sites keep their clip URLs. That
   is why one scrape can now find many videos instead of only the OpenGraph

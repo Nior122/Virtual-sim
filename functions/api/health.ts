@@ -36,6 +36,7 @@ const FEATURES = [
   "photo-caption-guarantee",
   "masked-manager-link",
   "advert-settings",
+  "image-probe-verdicts",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
