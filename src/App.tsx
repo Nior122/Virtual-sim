@@ -89,6 +89,40 @@ function AppShell() {
   );
 }
 
+/**
+ * An <img> that failed to load is hidden instead of showing a browser's broken
+ * image icon, and a neutral panel takes its place. The element is left in place
+ * (its `src` is untouched) so a lightbox or carousel that reuses it with a new
+ * URL recovers on the next successful load.
+ */
+function markImageBroken(image: HTMLImageElement): void {
+  if (image.dataset.dgBroken === "1") return;
+  image.dataset.dgBroken = "1";
+  image.style.visibility = "hidden";
+
+  const panel = image.parentElement;
+  if (!panel || panel.querySelector("[data-dg-img-fallback]")) return;
+  const fallback = document.createElement("div");
+  fallback.setAttribute("data-dg-img-fallback", "1");
+  fallback.setAttribute("aria-hidden", "true");
+  fallback.style.cssText =
+    "position:absolute;inset:0;border-radius:inherit;" +
+    "background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(255,255,255,.01));";
+  if (window.getComputedStyle(panel).position === "static") {
+    panel.style.position = "relative";
+  }
+  panel.appendChild(fallback);
+}
+
+function markImageLoaded(image: HTMLImageElement): void {
+  if (image.dataset.dgBroken !== "1") return;
+  delete image.dataset.dgBroken;
+  image.style.visibility = "";
+  image.parentElement
+    ?.querySelector("[data-dg-img-fallback]")
+    ?.remove();
+}
+
 export default function App() {
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
 
@@ -157,14 +191,43 @@ export default function App() {
       }
     };
 
+    /**
+     * 4. Hide any image that fails to load.
+     *
+     * Scraped photo links are kept even when the Worker cannot reach the CDN
+     * (see src/lib/bot/jpeg.ts): the visitor's browser is a different client
+     * and usually loads them. The ones that really are broken must not leave a
+     * torn-image box in the grid, so on error the <img> is faded out and the
+     * container behind it (always a neutral panel) shows instead.
+     *
+     * `error` does not bubble, but it does capture — this catches every image
+     * on the site, including ones rendered by third-party ad code.
+     */
+    const handleResourceError = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.tagName !== "IMG") return;
+      markImageBroken(target as HTMLImageElement);
+    };
+
+    // A reused element that loads a new URL must come back.
+    const handleResourceLoad = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.tagName !== "IMG") return;
+      markImageLoaded(target as HTMLImageElement);
+    };
+
     document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("dragstart", handleDragStart);
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("error", handleResourceError, true);
+    document.addEventListener("load", handleResourceLoad, true);
 
     return () => {
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("dragstart", handleDragStart);
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("error", handleResourceError, true);
+      document.removeEventListener("load", handleResourceLoad, true);
     };
   }, []);
 

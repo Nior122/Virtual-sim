@@ -165,8 +165,20 @@ export interface ScrapedProfile {
   sourceUrls: string[];
   /** Image URLs seen on the pages (before JPEG verification) */
   imageCandidates?: number;
-  /** Candidates dropped because they were not served as image/jpeg */
+  /** Candidates dropped because the server proved they are not a JPEG, or gone */
   imagesRejected?: number;
+  /**
+   * Images kept even though the probe could not reach them (the CDN blocked
+   * the Worker, timed out, or the subrequest budget ran out). The browser that
+   * displays them is a different client and usually can; the site hides any
+   * image that fails to load.
+   */
+  imagesUnverified?: number;
+  /**
+   * Images used although they are WebP/PNG. Only set when the page had no JPEG
+   * at all — a last resort, reported to the owner rather than hidden.
+   */
+  imagesForeignFormat?: number;
   /** Individual post pages opened to reach hidden main images/videos */
   detailPagesScanned?: number;
   /** Content-type probes spent verifying extensionless image URLs */

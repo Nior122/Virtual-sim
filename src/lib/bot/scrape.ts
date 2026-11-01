@@ -1,5 +1,15 @@
 import type { ScrapedProfile } from "./types";
 import { MAX_IMAGES } from "./types";
+import {
+  isJpegResponse,
+  mapWithConcurrency,
+  probeJpeg,
+  type JpegProbe,
+} from "./jpeg";
+
+/** Re-exported so every existing caller keeps one import path. */
+export { isJpegResponse, isVerifiedJpeg, probeJpeg } from "./jpeg";
+export type { JpegProbe, JpegVerdict } from "./jpeg";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -61,13 +71,17 @@ export const HARD_MAX_DETAIL_PAGES = 6;
 /**
  * Image probes allowed per scrape (Workers subrequest budget).
  *
- * Every stored image URL is verified now, so the budget has to cover the full
- * image limit (7) plus dead links and WebP→JPEG recovery.
+ * A probe is one request now instead of two (no HEAD first), and they run in
+ * parallel, so this budget buys far more than it used to: the image limit (7)
+ * plus dead links, WebP→JPEG recovery and the tail of a gallery.
  */
-const MAX_IMAGE_CHECKS = 18;
+const MAX_IMAGE_CHECKS = 24;
 
-/** Verification stops after this long and unverified URLs are dropped. */
-const PROBE_TIME_BUDGET_MS = 20000;
+/**
+ * Verification stops after this long. Probes run in parallel, and anything
+ * still unchecked is kept as "unverified" rather than dropped.
+ */
+const PROBE_TIME_BUDGET_MS = 12000;
 
 /** True for URLs that are JPEG by their name/query, no network call needed. */
 export function isPhotoUrl(url: string): boolean {
@@ -479,171 +493,158 @@ export function collectImageGroups(html: string, pageUrl: string): ImageGroups {
   return { primary, secondary, nonJpeg, nonJpegUrls };
 }
 
-/** Content types that can never be a JPEG — no body read needed. */
-const DEFINITELY_NOT_JPEG =
-  /^(?:image\/(?:png|webp|gif|svg|avif|bmp|tiff|x-icon|vnd\.microsoft\.icon)|video\/|audio\/|text\/html|application\/(?:json|xml|javascript|pdf|zip))/i;
-
-/** True when the response starts with the JPEG magic bytes FF D8 FF. */
-async function hasJpegMagic(res: Response): Promise<boolean> {
-  const reader = res.body?.getReader();
-  if (!reader) return false;
-  try {
-    const { value } = await reader.read();
-    if (!value || value.length < 3) return false;
-    return value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff;
-  } catch {
-    return false;
-  } finally {
-    reader.cancel().catch(() => {});
-  }
-}
-
-/**
- * Probe a URL and report whether the server actually returns a JPEG.
- *
- * Content-type alone is not reliable: plenty of CDNs answer with
- * `application/octet-stream`, an empty type, or `text/html` on HEAD, while
- * still serving a perfectly good JPEG. So the type is trusted when it is
- * decisive and the first bytes are sniffed (FF D8 FF) otherwise.
- */
-export async function isJpegResponse(
-  url: string,
-  referer: string
-): Promise<boolean> {
-  const headers: Record<string, string> = {
-    "User-Agent": BROWSER_UA,
-    Accept: "image/jpeg,image/*;q=0.8,*/*;q=0.5",
-    Referer: referer,
-  };
-
-  const decide = async (
-    res: Response,
-    mayReadBody: boolean
-  ): Promise<boolean> => {
-    const type = (res.headers.get("content-type") || "").toLowerCase().trim();
-    if (type.startsWith("image/jpeg") || type.startsWith("image/jpg")) {
-      return true;
-    }
-    if (DEFINITELY_NOT_JPEG.test(type)) return false;
-    // Unknown / generic type (octet-stream, empty, binary): sniff the bytes.
-    return mayReadBody ? hasJpegMagic(res) : false;
-  };
-
-  // 1) HEAD — cheap and decisive when the server sends a real image type.
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(url, {
-        method: "HEAD",
-        headers,
-        redirect: "follow",
-        signal: controller.signal,
-      });
-      if (res.ok) {
-        const type = (res.headers.get("content-type") || "").toLowerCase();
-        if (type.startsWith("image/jpeg") || type.startsWith("image/jpg")) {
-          res.body?.cancel().catch(() => {});
-          return true;
-        }
-        // An HTML/JSON answer to HEAD is usually bot protection rather than
-        // the real file, so only image/video/audio types are decisive here.
-        const decisive =
-          DEFINITELY_NOT_JPEG.test(type) &&
-          !/^text\/html|^application\/json/.test(type);
-        if (decisive) {
-          res.body?.cancel().catch(() => {});
-          return false;
-        }
-      }
-      res.body?.cancel().catch(() => {});
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch {
-    // HEAD blocked or unsupported — fall through to a ranged GET.
-  }
-
-  // 2) Ranged GET: read just the header bytes and check the JPEG signature.
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { ...headers, Range: "bytes=0-63" },
-        redirect: "follow",
-        signal: controller.signal,
-      });
-      if (!res.ok && res.status !== 206) {
-        res.body?.cancel().catch(() => {});
-        return false;
-      }
-      return await decide(res, true);
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch {
-    return false;
-  }
-}
+/** How many image URLs are probed at the same time. */
+const PROBE_CONCURRENCY = 6;
 
 /**
  * Candidate JPEG URLs for an image the site only advertises as WebP/PNG.
  *
- * Many CDNs (leakgallery, imagekit, cloudinary, …) keep the original photo as
- * JPEG and merely *serve* a webp thumbnail, so `x.webp` → `x.jpg` and the
- * `?fm=jpg` / `?format=jpg` transform variants often return a real JPEG.
- * Every variant is still verified, so a site that truly has no JPEG never
- * gets a broken image stored.
+ * Real sites hide the JPEG in one of four places, so all four are tried:
+ *
+ *  1. the same path with a different extension — `x.webp` → `x.jpg`;
+ *  2. a CDN transform — `?fm=jpg` (imgix), `?format=jpg` (imagekit/cloudinary);
+ *  3. a resizing CDN that converts automatically — Cloudflare's `auto=format`
+ *     serves WebP to a modern browser, so the *same* URL without that flag is
+ *     a JPEG again (this one surprises people, and it is very common);
+ *  4. a WordPress thumbnail — `photo-1024x768.jpg` is a crop of `photo.jpg`,
+ *     and the full-size file is usually still on the server.
+ *
+ * Every variant is verified, so a site that truly has no JPEG never gets a
+ * broken image stored.
  */
 export function jpegVariants(url: string): string[] {
   const variants: string[] = [];
-  const stripped = url.replace(/[?#].*$/, "");
-  const withoutExt = stripped.replace(/\.(?:webp|png|gif|avif|jpe?g)$/i, "");
-  const withQuery = url.match(/[?#].*$/)?.[0] || "";
+  const pushed = new Set<string>([url]);
+  const add = (candidate: string | null | undefined) => {
+    if (!candidate) return;
+    const clean = candidate.trim();
+    if (!clean || pushed.has(clean)) return;
+    if (!/^https?:\/\//i.test(clean)) return;
+    pushed.add(clean);
+    variants.push(clean);
+  };
 
-  if (withoutExt !== stripped) {
-    variants.push(`${withoutExt}.jpg`);
-    if (withQuery) variants.push(`${withoutExt}.jpg${withQuery}`);
+  const [pathAndQuery, ...hashParts] = url.split("#");
+  const hash = hashParts.length ? `#${hashParts.join("#")}` : "";
+  const queryIndex = pathAndQuery.indexOf("?");
+  const path = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : pathAndQuery.slice(queryIndex + 1);
+
+  // 1) Same path, `.jpg` instead of the format we were given.
+  const withoutExt = path.replace(/\.(?:webp|png|gif|avif|jpe?g)$/i, "");
+  if (withoutExt !== path) {
+    add(`${withoutExt}.jpg${query ? `?${query}` : ""}${hash}`);
+    add(`${withoutExt}.jpg${hash}`);
+    add(`${withoutExt}.jpeg${hash}`);
   }
-  const join = url.includes("?") ? "&" : "?";
-  variants.push(`${url}${join}fm=jpg`);
-  variants.push(`${url}${join}format=jpg`);
-  return [...new Set(variants)].filter((variant) => variant !== url);
+
+  // 2) CDN transform parameters.
+  const join = query ? "&" : "?";
+  add(`${pathAndQuery}${join}fm=jpg${hash}`);
+  add(`${pathAndQuery}${join}format=jpg${hash}`);
+  add(`${pathAndQuery}${join}fm=jpeg${hash}`);
+
+  // 3) Cloudflare Images / Next-style `auto=format` that picked WebP for us.
+  if (query.split("&").some((part) => /^auto=format$/i.test(part))) {
+    const withoutAuto = query
+      .split("&")
+      .filter((part) => !/^auto=format$/i.test(part))
+      .join("&");
+    add(`${path}${withoutAuto ? `?${withoutAuto}` : ""}${hash}`);
+  }
+
+  // 4) WordPress (and similar) resized thumbnails: `name-1024x768.jpg`.
+  const resized = path.match(/^(.*?)-\d{2,4}x\d{2,4}(\.jpe?g)$/i);
+  if (resized) {
+    add(`${resized[1]}${resized[2]}${query ? `?${query}` : ""}${hash}`);
+  }
+  const scaled = path.match(/^(.*?)-(?:scaled|rotated|copy)(\.jpe?g)$/i);
+  if (scaled) {
+    add(`${scaled[1]}${scaled[2]}${hash}`);
+  }
+
+  return variants;
 }
 
-/** Recover JPEG photos from WebP/PNG-only candidates, within a probe budget. */
+/**
+ * Recover JPEG photos from WebP/PNG-only candidates, within a probe budget.
+ *
+ * Variants of several sources are tried in parallel (one request each), so a
+ * gallery that only advertises WebP still gets a real JPEG in a second or two
+ * instead of spending the whole deadline on the first URL.
+ */
 async function recoverJpegVariants(
   sources: string[],
   limit: number,
   referer: string,
   budget: number
 ): Promise<{ images: string[]; checked: number }> {
-  const images: string[] = [];
-  let checked = 0;
-  for (const source of sources) {
-    if (images.length >= limit || checked >= budget) break;
-    for (const variant of jpegVariants(source)) {
-      if (images.length >= limit || checked >= budget) break;
-      checked += 1;
-      if (await isJpegResponse(variant, referer)) {
-        images.push(variant);
-        break;
-      }
+  if (limit <= 0 || budget <= 0 || sources.length === 0) {
+    return { images: [], checked: 0 };
+  }
+
+  // One variant per source per round, so every source gets a chance before
+  // any source is retried with its second-best guess.
+  const plan: Array<{ source: string; variant: string }> = [];
+  const seen = new Set<string>();
+  const perSource = sources.slice(0, Math.max(1, Math.min(sources.length, budget)));
+  for (let round = 0; round < 4 && plan.length < budget; round += 1) {
+    for (const source of perSource) {
+      if (plan.length >= budget) break;
+      const variant = jpegVariants(source)[round];
+      if (!variant || seen.has(variant)) continue;
+      seen.add(variant);
+      plan.push({ source, variant });
     }
   }
-  return { images, checked };
+
+  const results = await mapWithConcurrency(plan, PROBE_CONCURRENCY, (entry) =>
+    probeJpeg(entry.variant, { referer })
+  );
+
+  const images: string[] = [];
+  const won = new Set<string>();
+  results.forEach((probe, index) => {
+    if (probe.verdict !== "jpeg") return;
+    const source = plan[index].source;
+    if (won.has(source)) return;
+    if (images.length >= limit) return;
+    won.add(source);
+    images.push(probe.url);
+  });
+
+  return { images, checked: results.length };
+}
+
+export interface ImageResolution {
+  images: string[];
+  checked: number;
+  /** Decisive failures: the server answered with another format, or it is gone. */
+  rejected: number;
+  /** Links kept even though the probe could not reach them (browser may still load them). */
+  unverified: number;
+  /**
+   * Images used even though they are WebP/PNG — only ever set when the page has
+   * no JPEG at all and the alternative would be a profile with no photos.
+   */
+  foreignFormat: number;
 }
 
 /**
- * Turn ordered candidates into a verified JPEG image list.
+ * Turn ordered candidates into the image list a profile will use.
  *
- * Nothing is stored on the strength of its file name: `.jpg`, extensionless
- * CDN paths and everything else get a content-type/magic-byte probe, bounded
- * for the Workers subrequest budget. Candidates are ordered best-first, so a
- * thumbnail placed after its full-size file is only used when the full file
- * is dead.
+ * Everything is still checked — a `.jpg` name is not proof of a working file —
+ * but the check no longer decides by itself what gets thrown away:
+ *
+ *   jpeg      kept, in page order
+ *   blocked   kept at the end, up to the limit: a Worker that cannot reach a
+ *             CDN is not the browser that will display the photo, and the site
+ *             hides any image that fails to load
+ *   not-jpeg  retried as a JPEG variant of the same path (x.webp → x.jpg)
+ *   dead      dropped
+ *
+ * Probes run in parallel with a deadline, so a slow CDN costs a second, not the
+ * whole gallery.
  */
 export async function resolveImageCandidates(
   candidates: string[],
@@ -652,44 +653,95 @@ export async function resolveImageCandidates(
   maxChecks = MAX_IMAGE_CHECKS,
   /** WebP/PNG URLs to retry as JPEG variants once the normal list runs dry */
   nonJpegSources: string[] = []
-): Promise<{ images: string[]; checked: number; rejected: number }> {
-  const images: string[] = [];
-  let checked = 0;
-  let rejected = 0;
-  const checkBudget = Math.max(0, Math.min(maxChecks, MAX_IMAGE_CHECKS));
-  const deadline = Date.now() + PROBE_TIME_BUDGET_MS;
-
-  // Every URL is verified, including ones that end in .jpg. A `.jpg` name is
-  // not proof of a working file: deleted posts, hotlink protection and dead
-  // CDN mirrors all answer with 404/HTML, and those URLs render as broken
-  // images in the profile. Anything that cannot be verified is dropped.
-  for (const url of candidates) {
-    if (images.length >= limit) break;
-    if (checked >= checkBudget || Date.now() > deadline) break;
-    checked += 1;
-    if (await isJpegResponse(url, referer)) images.push(url);
-    else rejected += 1;
+): Promise<ImageResolution> {
+  const unique: string[] = [];
+  for (const candidate of candidates) {
+    if (!candidate || unique.includes(candidate)) continue;
+    unique.push(candidate);
   }
 
-  // Still short? Try to turn the rejected WebP/PNG images into JPEGs.
+  const checkBudget = Math.max(0, Math.min(maxChecks, MAX_IMAGE_CHECKS));
+  const deadline = Date.now() + PROBE_TIME_BUDGET_MS;
+  const toCheck = unique.slice(0, checkBudget);
+
+  const probes = await mapWithConcurrency(toCheck, PROBE_CONCURRENCY, async (url) => {
+    // Past the deadline, stop spending requests: nothing more will be used.
+    if (Date.now() > deadline) {
+      return { url, verdict: "blocked", reason: "time budget reached" } as JpegProbe;
+    }
+    // The Referer retry costs a second request per URL; past half the budget
+    // it is no longer worth it, so the remaining probes stay single-shot.
+    return probeJpeg(url, {
+      referer,
+      retryWithReferer: Date.now() < deadline - 3000,
+    });
+  });
+
+  let rejected = 0;
+  const verified: string[] = [];
+  const blocked: string[] = [];
+  probes.forEach((probe) => {
+    if (probe.verdict === "jpeg") verified.push(probe.url);
+    else if (probe.verdict === "blocked") blocked.push(probe.url);
+    else rejected += 1;
+  });
+
+  let checked = probes.length;
+  const images = verified.slice(0, limit);
+
+  // Still short? Turn WebP/PNG candidates into JPEGs where the CDN allows it.
   if (images.length < limit && nonJpegSources.length > 0) {
     const spare = checkBudget - checked;
-    if (spare > 0) {
+    if (spare > 0 && Date.now() < deadline) {
       const recovered = await recoverJpegVariants(
         nonJpegSources,
         limit - images.length,
         referer,
-        Math.min(spare, 6)
+        Math.min(spare, 8)
       );
       checked += recovered.checked;
       for (const image of recovered.images) {
         if (!images.includes(image)) images.push(image);
       }
-      rejected = Math.max(0, rejected + nonJpegSources.length - recovered.images.length);
     }
   }
 
-  return { images, checked, rejected };
+  // Fill the rest with links we could not verify. The site hides broken
+  // images, so this is a net gain: the alternative is a profile with fewer
+  // photos (or none) because a Worker's IP was blocked by a CDN.
+  let unverified = 0;
+  for (const url of blocked) {
+    if (images.length >= limit) break;
+    if (images.includes(url)) continue;
+    images.push(url);
+    unverified += 1;
+  }
+
+  // Nothing JPEG at all — but the page does have real pictures, just in
+  // WebP/PNG. Using them beats handing back an empty profile, and every
+  // browser that will display the result renders both formats. This is a
+  // last resort and it is reported as such, so it is never a silent change of
+  // the "JPEG only" rule.
+  let foreignFormat = 0;
+  if (images.length === 0 && nonJpegSources.length > 0 && Date.now() < deadline + 4000) {
+    const candidates = nonJpegSources.slice(0, 4);
+    const probes = await mapWithConcurrency(candidates, PROBE_CONCURRENCY, (url) =>
+      probeJpeg(url, { referer, retryWithReferer: false })
+    );
+    for (const probe of probes) {
+      if (images.length >= limit) break;
+      const realImage =
+        probe.verdict === "not-jpeg" &&
+        /^(?:serves image\/|bytes are (?:PNG|WebP|GIF|AVIF|BMP))/.test(probe.reason);
+      if (!realImage) continue;
+      images.push(probe.url);
+      foreignFormat += 1;
+    }
+  }
+
+  rejected = Math.max(rejected, 0);
+
+  return { images, checked, rejected, unverified, foreignFormat };
 }
 
 // ---------------------------------------------------------------------------
@@ -1259,7 +1311,7 @@ async function scrapeArchiveProfile(
         options.maxImageChecks,
         lists.nonJpeg
       )
-    : { images: [] as string[], checked: 0, rejected: 0 };
+    : { images: [] as string[], checked: 0, rejected: 0, unverified: 0, foreignFormat: 0 };
 
   if (options.wantImages && lists.images.length > 0 && resolved.images.length === 0) {
     // Different media host than expected (e.g. another mirror) — let the HTML
@@ -1291,6 +1343,8 @@ async function scrapeArchiveProfile(
     imageCandidates: options.wantImages ? lists.images.length : 0,
     imageChecks: resolved.checked,
     imagesRejected: resolved.rejected,
+    imagesUnverified: resolved.unverified,
+    imagesForeignFormat: resolved.foreignFormat,
     detailPagesScanned: 0,
   };
 }
@@ -1310,7 +1364,15 @@ export interface PageDiagnostics {
   primary: string[];
   secondary: string[];
   nonJpegUrls: string[];
-  probes: Array<{ url: string; ok: boolean }>;
+  probes: Array<{
+    url: string;
+    ok: boolean;
+    /** jpeg | not-jpeg | dead | blocked */
+    verdict?: string;
+    reason?: string;
+    httpStatus?: number;
+    contentType?: string;
+  }>;
   error?: string;
   /** Error the site rendered inside a 200 response (e.g. "Creator not found") */
   pageError?: string;
@@ -1398,12 +1460,19 @@ export async function inspectPage(
     0,
     Math.max(0, Math.min(maxProbes, 8))
   );
-  for (const candidate of toProbe) {
-    result.probes.push({
+  // Parallel, and every probe keeps its reason so /diag can explain a failure
+  // ("serves image/webp", "HTTP 403", "timed out") instead of just ✗.
+  result.probes = await mapWithConcurrency(toProbe, PROBE_CONCURRENCY, async (candidate) => {
+    const probe = await probeJpeg(candidate, { referer: target });
+    return {
       url: candidate,
-      ok: await isJpegResponse(candidate, target),
-    });
-  }
+      ok: probe.verdict === "jpeg" || probe.verdict === "blocked",
+      verdict: probe.verdict,
+      reason: probe.reason,
+      httpStatus: probe.httpStatus,
+      contentType: probe.contentType,
+    };
+  });
 
   // Coomer/Kemono: the listing is JS-rendered, so report the JSON API answer
   // — that is what a real scrape uses.
@@ -1705,7 +1774,7 @@ export async function scrapeProfile(
     }
   }
 
-  const { images, rejected, checked } = await resolveImageCandidates(
+  const { images, rejected, checked, unverified, foreignFormat } = await resolveImageCandidates(
     orderedCandidates,
     imageLimit,
     startUrl,
@@ -1731,6 +1800,8 @@ export async function scrapeProfile(
     imageCandidates: orderedCandidates.length,
     imageChecks: checked,
     imagesRejected: rejected + nonJpegImages,
+    imagesUnverified: unverified,
+    imagesForeignFormat: foreignFormat,
     detailPagesScanned,
   };
 }

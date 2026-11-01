@@ -624,6 +624,31 @@ async function handleCommand(
                 `${pages} page(s)`;
 
         const merged = draft.scraped;
+
+        // Say what actually happened to the images instead of blaming them:
+        // "blocked" means the check could not reach the file (the CDN refuses
+        // Workers), which is not the same as "this is not a JPEG".
+        const rejected = scraped.imagesRejected ?? 0;
+        const unverified = scraped.imagesUnverified ?? 0;
+        const candidates = scraped.imageCandidates ?? 0;
+        const foreign = scraped.imagesForeignFormat ?? 0;
+        const imageNote =
+          foreign > 0
+            ? `this page has no JPEG at all — ${foreign} WebP/PNG image(s) were ` +
+              `used as-is so the profile is not empty`
+            : scraped.images.length > 0
+            ? unverified > 0
+              ? `${unverified} of them could not be checked from the server (the CDN ` +
+                `refuses it) and are kept anyway — the page hides any that fail to load`
+              : ""
+            : rejected > 0
+              ? `${rejected} link(s) skipped: the server proved they are PNG/WebP/dead. ` +
+                `Try /scrape again with another post page, or add photos with /image <jpg url>.`
+              : candidates > 0
+                ? `${candidates} link(s) found, none could be opened from the server. ` +
+                  `Add photos directly with /image <jpg url>.`
+                : "";
+
         await sendMessage(
           env,
           chatId,
@@ -633,12 +658,7 @@ async function handleCommand(
               ? ` (opened ${scraped.detailPagesScanned} post page(s))`
               : "") +
             `\n` +
-            (scraped.images.length === 0 && (scraped.imagesRejected ?? 0) > 0
-              ? `  ↳ ${scraped.imagesRejected} image URL(s) were rejected — WebP/PNG/GIF, ` +
-                `a dead link, or not actually served as image/jpeg. Only working JPEGs are stored.\n`
-              : scraped.images.length === 0 && (scraped.imageCandidates ?? 0) > 0
-                ? `  ↳ ${scraped.imageCandidates} image URL(s) found but none returned a real JPEG\n`
-                : "") +
+            (imageNote ? `  ↳ ${imageNote}\n` : "") +
             `• Videos: ${videoLine}\n` +
             (scraped.description ? `• ${scraped.description.slice(0, 200)}\n` : "") +
             `\n` +
@@ -698,6 +718,14 @@ async function handleCommand(
             `Image candidates: ${report.primary.length + report.secondary.length} usable · ` +
               `${report.nonJpegUrls.length} WebP/PNG`
           );
+          if (report.probes.length > 0) {
+            const verified = report.probes.filter((p) => p.verdict === "jpeg").length;
+            const blocked = report.probes.filter((p) => p.verdict === "blocked").length;
+            lines.push(
+              `Probe result: ${verified} JPEG · ${blocked} unreachable (kept) · ` +
+                `${report.probes.length - verified - blocked} proven unusable`
+            );
+          }
 
           const usable = [...report.primary, ...report.secondary].slice(0, 6);
           if (usable.length > 0) {
@@ -707,9 +735,13 @@ async function handleCommand(
               const verdict =
                 probe === undefined
                   ? "not probed (beyond the probe budget)"
-                  : probe.ok
-                    ? "served as JPEG ✓"
-                    : "NOT a JPEG ✗";
+                  : probe.verdict === "jpeg"
+                    ? `JPEG ✓${probe.reason ? ` — ${probe.reason}` : ""}`
+                    : probe.verdict === "blocked"
+                      ? `kept, not verifiable from the server — ${probe.reason || "blocked"}`
+                      : probe.verdict === "dead"
+                        ? `gone — ${probe.reason || "404"}`
+                        : `not a JPEG ✗ — ${probe.reason || "another format"}`;
               lines.push(`${index + 1}. ${url.slice(0, 150)}\n   ${verdict}`);
             });
           }
