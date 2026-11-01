@@ -1,8 +1,9 @@
 # Web backend (`/admin`)
 
 A password-protected panel that does the same jobs as the Telegram bot, from a
-browser: private mode, share links, the ads redirect, every profile and its
-media, page imports, chat testing and diagnostics.
+browser: private mode, share links, the ads redirect, advert code (pop-under,
+social bar, native banners, the send-button link), every profile and its media,
+page imports, chat testing and diagnostics.
 
 ```
 https://<your-site>/admin
@@ -395,7 +396,91 @@ something odd, to see exactly what the profile says.
 
 ---
 
-## 6. Tools tab
+## 6. Adverts tab
+
+The **Adverts** tab is where advert code lives. Everything there is saved to KV
+and served to the site from `/api/ads`, so a change is live on the **next page
+load** — no merge, no deploy, no rebuild.
+
+Four slots, each with its own switch:
+
+| Slot | What it is | Where it runs |
+|---|---|---|
+| **Send-message button** | The link that opens when a visitor presses the send arrow inside a profile inbox | Chat screen |
+| **Pop-under** | The network's popunder script (opens behind the page) | Once per visit, capped |
+| **Social bar** | The sliding bar that stays on screen | Once per visit |
+| **Native banner** | The in-page "sponsored" block | Wherever you place it |
+
+### The send button
+
+This is the slot that earns the most on this site, because it is the one place a
+visitor tells you they are engaged.
+
+- **Click-through URL** — the destination. It opens in a new tab; it must start
+  with `http://` or `https://`. **Test link** opens it once to check it.
+- **When it opens** —
+  - *First click opens it, the next click sends* (default): press one opens the
+    advert and the message is **not** sent; press two sends it. A line under the
+    composer says "Tap send again to deliver your message", so nothing is lost
+    silently.
+  - *Every send click opens it — and the message is sent too*: maximum revenue,
+    maximum noise, one advert per message.
+  - *Never*: the send button only sends.
+- **Built-in link** puts the original advertiser back. **Turn off** clears the
+  link and sets the mode to *Never* in one step.
+
+The **master switch** at the top of the tab silences everything, including the
+send button. With no KV record at all, the panel and the site both fall back to
+the built-in link in the first click mode.
+
+### Where adverts run
+
+Two switches — **Home + browse page** and **Profile + chat pages** — decide which
+routes get the three inserted formats. `/admin` is always excluded, so the
+panel itself never loads third-party code. Placement is re-checked on every
+route change: a visitor who lands on the home page and then opens a profile
+does not get a second pop-under for the same visit.
+
+### Pasting the code
+
+Paste the snippet **exactly** as the network gave it — usually one `<script>` tag
+plus maybe an `<ins>` or a `<div>`.
+
+- An enabled but empty slot shows *"Switched on but empty"* — it would earn
+  nothing.
+- The counter under the box shows the character count and how many scripts the
+  snippet contains, and **Calls:** lists the hosts it will contact, so a
+  mismatched paste (the wrong network, or a snippet from a different campaign)
+  is visible before you save.
+- A snippet containing `document.write` is mounted in an isolated, sandboxed
+  frame. Run directly in the page, `document.write` replaces the whole document
+  — the site would go blank. In the frame it only writes into its own 110-pixel
+  box, which is then resized to the advert's real height.
+- The **same snippet in two slots** is refused: firing one campaign twice is
+  what gets accounts suspended. One format, one snippet.
+
+### Keeping it effective
+
+The tab ends with five rules; the short version:
+
+1. Paste the snippet untouched.
+2. One snippet per format.
+3. Keep the send button on *first click*.
+4. Cap the pop-under (default three per visit, 60 s apart). Visitors who are
+   interrupted on every page do not come back, and the network pays less for
+   traffic that does not convert.
+5. Leave the native banner `inline` until you know the traffic tolerates a
+   pinned bar. A pinned bar can cover the message box on small phones; visitors
+   can dismiss it, and the dismissal lasts for their session.
+
+**Reset everything** clears all four slots and restores the built-in link.
+
+> Advert code runs in your visitors' browsers and can do anything a script can.
+> Only paste code from a network you signed up with.
+
+---
+
+## 7. Tools tab
 
 - **Diagnose a page** — the same report as `/diag`: HTTP status, content type,
   `<img>`/`<source>` counts, bot-challenge detection, the Coomer/Kemono archive
@@ -408,13 +493,14 @@ something odd, to see exactly what the profile says.
 
 ---
 
-## 7. Bot vs backend
+## 8. Bot vs backend
 
 | Job | Telegram | Web backend |
 |---|---|---|
 | Private mode | `/private` (ON/OFF buttons) | Overview switch |
 | Share links | `/link <slug> 6h`, `/sharelinks`, `/revoke` | Overview: create, copy, revoke |
-| Ads URL | `/adlink <url>` | Overview: destination card |
+| Ads URL (expired links) | `/adlink <url>` | Overview: destination card |
+| Advert code (pop-under, social bar, native, send button) | — | Adverts tab |
 | List profiles | `/profiles` | Profiles tab |
 | Create from scraping | `/scrape` → `/preview` → `/confirm` | Import tab |
 | Bulk import | `/bulk` → `/previewall` → `/confirm` | Import tab (one card per URL) |
@@ -429,7 +515,7 @@ is visible in the other immediately.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -443,11 +529,14 @@ is visible in the other immediately.
 | `/admin` answers 404 | Private mode hides it only for people without a session? No — `/admin` is always served. A 404 means the deployment has no `functions/api/admin` (old build) or a proxy is stripping the route. |
 | Session ends too early | `ADMIN_SESSION_HOURS` is short, or `ADMIN_PASSWORD`/`ADMIN_SESSION_SECRET` changed (which invalidates every cookie). |
 | A client says the site is "busy" and will not call | they used their allowance: one call per profile every 2h, five calls every 5h | the screen shows a countdown; chat still works. Reset by clearing that browser's cookies — see [CALL_LIMITS.md](CALL_LIMITS.md) |
+| Advert code is saved but nothing appears | Check the slot's switch **and** the master switch, and that the current route is covered by **Where adverts run**. On the chat screen a fixed banner can be hidden behind the composer — dismiss it with ✕ once, or switch the banner to *Inline*. |
+| A pop-under never opens | The network's own frequency cap, the panel cap (three per visit, 60 s apart), or the browser blocked the window. Paste a page-load script rather than one that only fires on clicks. |
+| "The same code is in the pop-under and the social bar slots" | By design: one snippet per format. Ask the network for a separate snippet for each format, or run one of them. |
 | The panel works on the live site but not with `npm run dev` | `npm run dev` starts the Express server, which does not run Pages Functions. Use `npx wrangler pages dev dist` (after `npm run build`) to exercise `/api/admin/*` locally. |
 
 ---
 
-## 9. What is not here
+## 10. What is not here
 
 - **File uploads.** The bot can accept a photo/video sent to Telegram; the web
   panel accepts URLs only, because Pages Functions have no storage bucket. Use
@@ -456,3 +545,6 @@ is visible in the other immediately.
   failure cannot leave half a list half-written.
 - **Multiple accounts or roles.** One password, one owner.
 - **A public signup.** No accounts exist to sign up with.
+- **Ad revenue reporting.** The panel stores and serves ad *code*; impressions,
+  clicks and payout live in the network's own dashboard. Nothing third-party is
+  logged here.

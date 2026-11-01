@@ -14,6 +14,7 @@ import OnlinePopupToast from "./components/OnlinePopupToast";
 import PrivateNotFound from "./components/PrivateNotFound";
 import AuthModal from "./components/AuthModal";
 import UserSettingsModal from "./components/UserSettingsModal";
+import AdSlots from "./components/AdSlots";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useSiteMode } from "./hooks/useSiteMode";
@@ -80,6 +81,8 @@ function AppShell() {
 
       {/* The toast advertises random profiles — it has no place in private mode. */}
       {ready && !isPrivate && <OnlinePopupToast />}
+      {/* Owner-configured advert formats (no-ops until code is pasted in /admin). */}
+      <AdSlots />
       <AuthModal />
       <UserSettingsModal />
     </>
