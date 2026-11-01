@@ -74,7 +74,10 @@ function isPublicApi(path: string): boolean {
     path === "/api/health" ||
     path === "/api/site-mode" ||
     path === "/api/telegram-bot" ||
-    path === "/api/call-access"
+    path === "/api/call-access" ||
+    // The owner's advert settings. Public by nature (the browser has to run
+    // the snippets), and needed on profile pages, which private mode serves.
+    path === "/api/ads"
   );
 }
 

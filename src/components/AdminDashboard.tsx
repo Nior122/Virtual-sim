@@ -5,6 +5,7 @@ import {
   Download,
   Lock,
   LogOut,
+  Megaphone,
   ShieldCheck,
   Terminal,
   UserRound,
@@ -22,14 +23,16 @@ import ProfilesPanel from "./admin/ProfilesPanel";
 import ImportPanel from "./admin/ImportPanel";
 import ChatPanel from "./admin/ChatPanel";
 import ToolsPanel from "./admin/ToolsPanel";
+import AdvertsPanel from "./admin/AdvertsPanel";
 
-type Tab = "overview" | "profiles" | "import" | "chat" | "tools";
+type Tab = "overview" | "profiles" | "import" | "chat" | "adverts" | "tools";
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof BarChart3 }> = [
   { id: "overview", label: "Overview", icon: BarChart3 },
   { id: "profiles", label: "Profiles", icon: UserRound },
   { id: "import", label: "Import", icon: Download },
   { id: "chat", label: "Chat test", icon: Bot },
+  { id: "adverts", label: "Adverts", icon: Megaphone },
   { id: "tools", label: "Tools", icon: Terminal },
 ];
 
@@ -180,7 +183,9 @@ export default function AdminDashboard() {
           ? ImportPanel
           : tab === "chat"
             ? ChatPanel
-            : ToolsPanel;
+            : tab === "adverts"
+              ? AdvertsPanel
+              : ToolsPanel;
 
   return (
     <div className="min-h-screen bg-[#07080e] text-neutral-100">

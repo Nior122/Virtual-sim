@@ -2,6 +2,7 @@
 // Typed client for the /admin backend.
 // Every call is same-origin so the HttpOnly session cookie travels with it.
 // ---------------------------------------------------------------------------
+import type { AdSettings } from "../ads/config";
 
 export class ApiError extends Error {
   status: number;
@@ -107,6 +108,14 @@ export const revokeLink = (selector: string) =>
     method: "DELETE",
     body: JSON.stringify({ selector }),
   });
+
+// ---------------------------------------------------------------------------
+// Adverts (settings shape lives in src/lib/ads/config.ts, shared with the site)
+// ---------------------------------------------------------------------------
+export const getAds = () => request<AdSettings>("ads");
+
+/** Partial update: anything omitted keeps its current stored value. */
+export const saveAds = (patch: Partial<AdSettings>) => post<AdSettings>("ads", patch);
 
 // ---------------------------------------------------------------------------
 // Profiles

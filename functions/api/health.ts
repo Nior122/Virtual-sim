@@ -35,6 +35,7 @@ const FEATURES = [
   "varied-call-pickup",
   "photo-caption-guarantee",
   "masked-manager-link",
+  "advert-settings",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

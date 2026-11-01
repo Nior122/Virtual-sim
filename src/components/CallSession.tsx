@@ -85,6 +85,8 @@ import {
 } from "../lib/manager";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { CallBlockedScreen } from "./CallBlockedScreen";
+import { getAdSettings, openExternalTab } from "../lib/ads/client";
+import { defaultAdSettings, planSendClick, type AdSettings } from "../lib/ads/config";
 
 interface PendingAttachment {
   file: File;
@@ -551,31 +553,30 @@ export default function CallSession() {
     return Array.from(map.entries());
   };
 
-  // Ad link redirect state: first send click directs to link, second send click sends message then resets
-  const AD_REDIRECT_URL = "https://www.profitableratecpmnetwork.com/a3cptaygun?key=688309bf3a231ec0d6225f4236716aef";
+  // Send-button advertiser. The destination and the click rule are set by the
+  // owner in /admin → Adverts and read from /api/ads; the built-in defaults
+  // stand in until that request answers (or if it never does), so the advert
+  // keeps working during an outage.
   const canSendAfterAdRef = useRef(false);
+  const adSettingsRef = useRef<AdSettings>(defaultAdSettings());
+  const [adClickPending, setAdClickPending] = useState(false);
 
-  const openAdLink = () => {
-    try {
-      const opened = window.open(AD_REDIRECT_URL, "_blank", "noopener,noreferrer");
-      if (!opened || opened.closed || typeof opened.closed === "undefined") {
-        const link = document.createElement("a");
-        link.href = AD_REDIRECT_URL;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (err) {
-      console.error("Ad redirect error:", err);
-      window.open(AD_REDIRECT_URL, "_blank");
-    }
-  };
+  useEffect(() => {
+    let alive = true;
+    getAdSettings()
+      .then((next) => {
+        if (alive) adSettingsRef.current = next;
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!inputMessage.trim()) {
       canSendAfterAdRef.current = false;
+      setAdClickPending(false);
     }
   }, [inputMessage]);
 
@@ -1425,15 +1426,20 @@ export default function CallSession() {
     const hasAttachment = !!pendingAttachment;
     if ((!hasText && !hasAttachment) || !persona) return;
 
-    // First click: opens ad URL without sending message
-    if (!canSendAfterAdRef.current) {
-      canSendAfterAdRef.current = true;
-      openAdLink();
-      return;
+    // Owner-configured advertiser on the send button (/admin → Adverts).
+    // `planSendClick` is pure and lives with the settings, so the rule the
+    // panel describes is the rule that runs.
+    const plan = planSendClick(adSettingsRef.current, canSendAfterAdRef.current);
+    if (plan.open) {
+      openExternalTab(adSettingsRef.current.click.url);
+      canSendAfterAdRef.current = plan.nextPending;
+      setAdClickPending(plan.nextPending);
     }
+    if (!plan.send) return;
 
-    // Second click: sends message and resets flag for the next cycle
+    // This click delivers the message.
     canSendAfterAdRef.current = false;
+    setAdClickPending(false);
 
     const attached = pendingAttachment;
     setPendingAttachment(null);
@@ -3004,6 +3010,15 @@ export default function CallSession() {
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        )}
+
+        {/* The first send click opened the advertiser; the message is still
+            sitting in the box, so say so instead of leaving it silent. */}
+        {adClickPending && (
+          <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px] text-sky-300/90">
+            <Send className="w-3 h-3 shrink-0" />
+            <span>Tap send again to deliver your message.</span>
           </div>
         )}
 
