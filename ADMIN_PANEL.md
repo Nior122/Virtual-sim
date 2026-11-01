@@ -335,7 +335,7 @@ badge. Search by name or slug.
 - **Profile copy** — description, personality, background, interests, speaking
   style, short/long bio and the smaller fields.
 - **Videos** — one row per clip: a **thumbnail on the left, the link and title
-  on the right**, numbered in the order the call screen plays them. The
+  on the right**, numbered in the order they were added. The
   thumbnail is a real frame pulled from the video itself, so you can see which
   clip you are about to remove instead of comparing bare URLs. It keeps the
   clip's own shape — a portrait video gets a tall preview, a landscape video a
@@ -346,11 +346,29 @@ badge. Search by name or slug.
   videos. Direct files (`.mp4`, `.webm`, `.m3u8`) are stored as-is; embed
   players are resolved to a playable stream on save. Links with no playable
   stream are skipped and reported. The trash button on the right removes just
-  that row; nothing is deleted until you save.
+  that row; nothing is deleted until you save. The numbers show the upload
+  order, **not** the play order: the call screen rotates clips randomly (see
+  below).
 - **Advanced** — body details, intimate fields and the **system prompt**. The
   prompt is never sent to a browser by any public endpoint.
 
 Saving with no changes is harmless. Text-only edits do not re-check the images.
+
+### Which video plays on a call
+
+Never "the first one uploaded". Each profile keeps a shuffled deck of its clips
+(`src/lib/video/rotation.ts`):
+
+- the first call takes a clip from a freshly shuffled deck, so the opening clip
+  is random across every upload;
+- that clip leaves the deck, so each clip gets a turn before any repeats;
+- a new deck never opens with the clip that just played, so two calls in a row
+  are different whenever the profile has more than one video;
+- the deck lives in the visitor's browser (`localStorage`), so it survives a
+  reload, and falls back to memory when storage is blocked.
+
+Deleting a clip is safe: a stale entry in a deck is skipped. The order in the
+editor is only the order rows are listed — it does not decide what plays.
 
 ---
 
@@ -459,6 +477,18 @@ plus maybe an `<ins>` or a `<div>`.
 - The **same snippet in two slots** is refused: firing one campaign twice is
   what gets accounts suspended. One format, one snippet.
 
+### How a placed banner looks
+
+No wrap of our own: **no "Advertisement" label, no border, no background, no
+shadow.** The wrapper is transparent and sized to the creative, so the banner
+sits in the page the way the network designed it. The only exception is a
+**pinned** banner (top/bottom), which keeps one discreet `×` in its corner so a
+visitor can clear it off the message box; that is invisible on inline banners.
+
+> The label is gone from the page, not from the markup: the slot keeps
+> `role="complementary"` and a screen-reader name, which is also what several
+> networks and ad-disclosure rules ask for.
+
 ### Keeping it effective
 
 The tab ends with five rules; the short version:
@@ -470,8 +500,8 @@ The tab ends with five rules; the short version:
    interrupted on every page do not come back, and the network pays less for
    traffic that does not convert.
 5. Leave the native banner `inline` until you know the traffic tolerates a
-   pinned bar. A pinned bar can cover the message box on small phones; visitors
-   can dismiss it, and the dismissal lasts for their session.
+   pinned bar. A pinned bar can cover the message box on small phones; the
+   corner `×` clears it for that session.
 
 **Reset everything** clears all four slots and restores the built-in link.
 
@@ -529,7 +559,7 @@ is visible in the other immediately.
 | `/admin` answers 404 | Private mode hides it only for people without a session? No — `/admin` is always served. A 404 means the deployment has no `functions/api/admin` (old build) or a proxy is stripping the route. |
 | Session ends too early | `ADMIN_SESSION_HOURS` is short, or `ADMIN_PASSWORD`/`ADMIN_SESSION_SECRET` changed (which invalidates every cookie). |
 | A client says the site is "busy" and will not call | they used their allowance: one call per profile every 2h, five calls every 5h | the screen shows a countdown; chat still works. Reset by clearing that browser's cookies — see [CALL_LIMITS.md](CALL_LIMITS.md) |
-| Advert code is saved but nothing appears | Check the slot's switch **and** the master switch, and that the current route is covered by **Where adverts run**. On the chat screen a fixed banner can be hidden behind the composer — dismiss it with ✕ once, or switch the banner to *Inline*. |
+| Advert code is saved but nothing appears | Check the slot's switch **and** the master switch, and that the current route is covered by **Where adverts run**. On the chat screen a fixed banner can be hidden behind the composer — tap the corner `×` once, or switch the banner to *Inline*. |
 | A pop-under never opens | The network's own frequency cap, the panel cap (three per visit, 60 s apart), or the browser blocked the window. Paste a page-load script rather than one that only fires on clicks. |
 | "The same code is in the pop-under and the social bar slots" | By design: one snippet per format. Ask the network for a separate snippet for each format, or run one of them. |
 | The panel works on the live site but not with `npm run dev` | `npm run dev` starts the Express server, which does not run Pages Functions. Use `npx wrangler pages dev dist` (after `npm run build`) to exercise `/api/admin/*` locally. |

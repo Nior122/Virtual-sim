@@ -137,12 +137,17 @@ function globalHost(kind: string): HTMLElement {
   return host;
 }
 
+/**
+ * The wrapper carries no frame of its own: no background, no border, no shadow,
+ * no label. A banner should read as part of the page, not as a boxed-off slot,
+ * and the creative the network renders supplies its own styling.
+ */
 function nativeStyle(position: BannerPosition): string {
   if (position === "fixed-top") {
-    return "position:fixed;left:0;right:0;top:0;z-index:45;background:#0b0d16;border-bottom:1px solid rgba(255,255,255,.09);padding:2px 10px 6px;box-shadow:0 8px 24px rgba(0,0,0,.45);box-sizing:border-box;";
+    return "position:fixed;left:0;right:0;top:0;z-index:45;background:transparent;padding:0;box-sizing:border-box;";
   }
   if (position === "fixed-bottom") {
-    return "position:fixed;left:0;right:0;bottom:0;z-index:45;background:#0b0d16;border-top:1px solid rgba(255,255,255,.09);padding:2px 10px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.45);box-sizing:border-box;";
+    return "position:fixed;left:0;right:0;bottom:0;z-index:45;background:transparent;padding:0 0 env(safe-area-inset-bottom);box-sizing:border-box;";
   }
   return "width:100%;max-width:760px;margin:18px auto 26px;padding:0 12px;box-sizing:border-box;";
 }
@@ -156,42 +161,41 @@ function ensureNative(position: BannerPosition): { host: HTMLElement; slot: HTML
 
   const host = document.createElement("div");
   host.id = NATIVE_ID;
+  // Screen readers still get a name; nothing visible is added to the page.
   host.setAttribute("role", "complementary");
-  host.setAttribute("aria-label", "Advertisement");
+  host.setAttribute("aria-label", "Sponsored content");
   host.style.cssText = nativeStyle(position);
-
-  const bar = document.createElement("div");
-  bar.style.cssText =
-    "display:flex;align-items:center;justify-content:space-between;gap:8px;" +
-    "font:500 9px/1.4 ui-sans-serif,system-ui,sans-serif;letter-spacing:.12em;" +
-    "text-transform:uppercase;color:#8b8f9a;padding:2px 2px 0;";
-
-  const label = document.createElement("span");
-  label.textContent = "Advertisement";
-
-  const close = document.createElement("button");
-  close.type = "button";
-  close.textContent = "✕";
-  close.setAttribute("aria-label", "Hide advert");
-  close.style.cssText =
-    "background:none;border:0;color:#8b8f9a;font:inherit;font-size:12px;" +
-    "line-height:1;cursor:pointer;padding:2px 6px;";
-  close.addEventListener("click", () => {
-    try {
-      window.sessionStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      /* storage disabled: hiding is still fine for this page */
-    }
-    host.style.display = "none";
-  });
-
-  bar.append(label, close);
 
   const slot = document.createElement("div");
   slot.setAttribute("data-dg-ad-slot", "native");
   slot.style.cssText = "min-height:1px;";
 
-  host.append(bar, slot);
+  host.appendChild(slot);
+
+  // A pinned banner sits on top of the page, so it keeps one discreet escape:
+  // a bare ✕ in its corner, no background or border. An inline banner covers
+  // nothing and gets no chrome at all.
+  if (position !== "inline") {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "\u00d7";
+    close.setAttribute("aria-label", "Hide sponsored content");
+    close.style.cssText =
+      "position:absolute;top:1px;right:3px;z-index:1;background:none;" +
+      "border:0;color:inherit;opacity:.35;" +
+      "font:400 13px/1 ui-sans-serif,system-ui,sans-serif;" +
+      "line-height:1;cursor:pointer;padding:2px 4px;";
+    close.addEventListener("click", () => {
+      try {
+        window.sessionStorage.setItem(DISMISS_KEY, "1");
+      } catch {
+        /* storage disabled: hiding is still fine for this page */
+      }
+      host.style.display = "none";
+    });
+    host.appendChild(close);
+  }
+
   document.body.appendChild(host);
   return { host, slot };
 }
