@@ -416,8 +416,10 @@ export default function ProfilesPanel() {
               <Plus className="w-3.5 h-3.5" /> Add image slot
             </Button>
             <p className="text-[11px] text-neutral-500 mt-2">
-              Only JPEG URLs that actually answer with image/jpeg are saved — the
-              bot uses the same rule, so a broken link can never reach the site.
+              Every image is checked: links the server proves are WebP/PNG (or gone)
+              are refused, while a link the server cannot reach is still saved — the
+              site hides any image that fails to load, so a probe block never costs
+              you a photo.
             </p>
           </Card>
         </div>
