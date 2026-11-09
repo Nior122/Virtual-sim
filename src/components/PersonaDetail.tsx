@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Persona } from "../types";
 import { DEFAULT_PERSONAS } from "../data/defaultPersonas";
+import { MANAGER_REDIRECT_PATH } from "../lib/manager";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -916,7 +917,7 @@ export default function PersonaDetail() {
                 </div>
 
                 <a
-                  href="https://fansleak.pages.dev"
+                  href={MANAGER_REDIRECT_PATH}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full mt-3.5 py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-[#e1147a] via-[#ec4899] to-[#9333ea] hover:opacity-95 shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-95 text-center cursor-pointer"
@@ -942,7 +943,7 @@ export default function PersonaDetail() {
                   <p className="text-[11px] text-neutral-500 max-w-[200px]">Profile photos will be displayed here once provided.</p>
                 </div>
                 <a
-                  href="https://fansleak.pages.dev"
+                  href={MANAGER_REDIRECT_PATH}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full mt-2 py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-[#e1147a] via-[#ec4899] to-[#9333ea] hover:opacity-95 shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-95 text-center cursor-pointer"

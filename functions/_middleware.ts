@@ -82,6 +82,20 @@ function isPublicApi(path: string): boolean {
 }
 
 /**
+ * The masked manager link (`/manager` → the manager's Telegram chat).
+ *
+ * It carries no profile data at all — a fixed 302 and nothing else — and it is
+ * the only route behind every "manager" button: the link in a chat message and
+ * the "View All" button on a profile. Profile pages stay reachable while
+ * private mode is ON, so this must stay reachable with them; the gate used to
+ * 404 it, which dead-ended the manager button on exactly the pages private
+ * mode still serves.
+ */
+function isManagerRedirect(path: string): boolean {
+  return path === "/manager" || path === "/manager/";
+}
+
+/**
  * The owner's backend.
  *
  * It must stay reachable while private mode is ON — otherwise turning the site
@@ -208,7 +222,12 @@ export async function onRequest(context: EventContext): Promise<Response> {
   if (path === "/s" || path.startsWith("/s/")) return notFound();
 
   // 2) Assets, infrastructure and the owner's backend are never gated.
-  if (isPublicAsset(path) || isPublicApi(path) || isAdminPath(path)) {
+  if (
+    isPublicAsset(path) ||
+    isPublicApi(path) ||
+    isAdminPath(path) ||
+    isManagerRedirect(path)
+  ) {
     return context.next();
   }
 
