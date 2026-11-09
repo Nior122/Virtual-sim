@@ -37,6 +37,7 @@ const FEATURES = [
   "masked-manager-link",
   "advert-settings",
   "image-probe-verdicts",
+  "view-all-manager-link",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
