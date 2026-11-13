@@ -11,7 +11,9 @@ import type { Env } from "../bot/types";
 import {
   AD_SETTINGS_KEY,
   CLICK_MODES,
+  DEFAULT_CLICK_URL,
   MAX_SNIPPET_CHARS,
+  currentClickUrl,
   defaultAdSettings,
   normaliseAdSettings,
   isHttpUrl,
@@ -35,13 +37,34 @@ function kv(env: Env): KVNamespace | null {
 export async function readAdSettings(env: Env): Promise<AdSettings> {
   const store = kv(env);
   if (!store) return defaultAdSettings();
+  let settings: AdSettings;
   try {
     const raw = await store.get<unknown>(AD_SETTINGS_KEY, "json");
     if (!raw) return defaultAdSettings();
-    return normaliseAdSettings(raw);
+    settings = normaliseAdSettings(raw);
   } catch {
     return defaultAdSettings();
   }
+
+  // A record saved while an older URL was the built-in default still names that
+  // URL. Upgrade the exact match once and write it back, so the change is made
+  // in one place (DEFAULT_CLICK_URL) instead of in the panel by hand. Any other
+  // stored URL is a choice the owner made and is kept untouched.
+  const { url, migrated } = currentClickUrl(settings.click.url);
+  if (!migrated) return settings;
+
+  const upgraded: AdSettings = {
+    ...settings,
+    updatedAt: Date.now(),
+    click: { ...settings.click, url },
+  };
+  try {
+    await store.put(AD_SETTINGS_KEY, JSON.stringify(upgraded));
+  } catch {
+    // Serving the new URL matters more than persisting it; the next write
+    // (any panel save) will store it.
+  }
+  return upgraded;
 }
 
 type Bag = Record<string, unknown>;

@@ -24,7 +24,35 @@ export const MAX_SNIPPET_CHARS = 20_000;
  * unreachable, so the send-button advert keeps working during an outage.
  */
 export const DEFAULT_CLICK_URL =
-  "https://downconvenientmagnetic.com/gnzgnq4tuu?key=65f2307646f602430f34834500ac67c9";
+  "https://asiaso.org/4/65f2307646f602430f34834500ac67c9";
+
+/**
+ * Click-through URLs that used to be the built-in default.
+ *
+ * The stored settings record wins over `DEFAULT_CLICK_URL` — correctly, because
+ * it is what the owner chose. But a record saved while an old URL was the
+ * default also *contains* that old URL, so replacing the default alone would
+ * leave production pointing at the old network forever. `readAdSettings`
+ * upgrades an exact match of one of these to the current default; any other
+ * stored URL is a deliberate choice and is left alone.
+ *
+ * Add a URL here only when it was shipped as `DEFAULT_CLICK_URL`.
+ */
+export const LEGACY_CLICK_URLS: readonly string[] = [
+  "https://downconvenientmagnetic.com/gnzgnq4tuu?key=65f2307646f602430f34834500ac67c9",
+];
+
+/** The URL the send button should open, given what is stored. */
+export function currentClickUrl(stored: string): {
+  url: string;
+  migrated: boolean;
+} {
+  const value = typeof stored === "string" ? stored.trim() : "";
+  if (LEGACY_CLICK_URLS.includes(value)) {
+    return { url: DEFAULT_CLICK_URL, migrated: true };
+  }
+  return { url: stored, migrated: false };
+}
 
 /**
  * first — the first send click opens the advert and does NOT send the message;
