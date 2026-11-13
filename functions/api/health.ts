@@ -39,6 +39,7 @@ const FEATURES = [
   "image-probe-verdicts",
   "view-all-manager-link",
   "advert-click-url-refresh",
+  "hourly-call-cooldown",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

@@ -1,10 +1,10 @@
 import { Ban, Home, MessageSquare, PhoneOff, Timer, User, Video } from "lucide-react";
-import { formatWait } from "../lib/calls/limits";
+import { formatWait, hoursLabel } from "../lib/calls/limits";
 
 /**
  * The two screens a client hits when the call regulator says no.
  *
- *   kind="cooldown" → that one profile was already called in the last 2 hours.
+ *   kind="cooldown" → that one profile was already called in the last hour.
  *                     "User Busy", and the only action is Message.
  *   kind="limit"    → all five calls are spent. Nothing can be called until a
  *                     slot frees; chat stays open.
@@ -155,8 +155,8 @@ export function CallBlockedScreen({
 
       <p className="mt-6 text-center text-[11px] text-neutral-600">
         {isLimit
-          ? `One call per profile every ${cooldownHours} hours, ${maxCalls} calls every ${windowHours} hours.`
-          : `One call per profile every ${cooldownHours} hours.`}
+          ? `One call per profile every ${hoursLabel(cooldownHours)}, ${maxCalls} calls every ${hoursLabel(windowHours)}.`
+          : `One call per profile every ${hoursLabel(cooldownHours)}.`}
       </p>
     </div>
   );

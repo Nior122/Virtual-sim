@@ -291,7 +291,7 @@ sets the same value — the two always agree because both read the same KV key.
 
 ### Call limits
 
-Every client can call **one profile every 2 hours** and **five calls every
+Every client can call **one profile every hour** and **five calls every
 5 hours** in total; after that they get a *User Busy* / *Call limit reached*
 screen with only a Message button. Nothing to switch on — it is always active,
 and a call only counts once the persona's video really starts playing.
@@ -568,7 +568,7 @@ is visible in the other immediately.
 | Video saves but does not play | Tools → Check videos. Embeds with no extractable stream are skipped on save; use the direct `.mp4`/`.m3u8` URL instead. |
 | `/admin` answers 404 | Private mode hides it only for people without a session? No — `/admin` is always served. A 404 means the deployment has no `functions/api/admin` (old build) or a proxy is stripping the route. |
 | Session ends too early | `ADMIN_SESSION_HOURS` is short, or `ADMIN_PASSWORD`/`ADMIN_SESSION_SECRET` changed (which invalidates every cookie). |
-| A client says the site is "busy" and will not call | they used their allowance: one call per profile every 2h, five calls every 5h | the screen shows a countdown; chat still works. Reset by clearing that browser's cookies — see [CALL_LIMITS.md](CALL_LIMITS.md) |
+| A client says the site is "busy" and will not call | they used their allowance: one call per profile every 1h, five calls every 5h | the screen shows a countdown; chat still works. Reset by clearing that browser's cookies — see [CALL_LIMITS.md](CALL_LIMITS.md) |
 | Advert code is saved but nothing appears | Check the slot's switch **and** the master switch, and that the current route is covered by **Where adverts run**. On the chat screen a fixed banner can be hidden behind the composer — tap the corner `×` once, or switch the banner to *Inline*. |
 | A pop-under never opens | The network's own frequency cap, the panel cap (three per visit, 60 s apart), or the browser blocked the window. Paste a page-load script rather than one that only fires on clicks. |
 | "The same code is in the pop-under and the social bar slots" | By design: one snippet per format. Ask the network for a separate snippet for each format, or run one of them. |
