@@ -38,6 +38,7 @@ const FEATURES = [
   "advert-settings",
   "image-probe-verdicts",
   "view-all-manager-link",
+  "advert-click-url-refresh",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

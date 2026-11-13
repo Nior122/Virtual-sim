@@ -444,12 +444,22 @@ visitor tells you they are engaged.
   - *Every send click opens it — and the message is sent too*: maximum revenue,
     maximum noise, one advert per message.
   - *Never*: the send button only sends.
-- **Built-in link** puts the original advertiser back. **Turn off** clears the
-  link and sets the mode to *Never* in one step.
+- **Built-in link** puts the current advertiser back — the one compiled into
+  `src/lib/ads/config.ts` as `DEFAULT_CLICK_URL`. **Turn off** clears the link
+  and sets the mode to *Never* in one step.
 
 The **master switch** at the top of the tab silences everything, including the
 send button. With no KV record at all, the panel and the site both fall back to
 the built-in link in the first click mode.
+
+**Changing the built-in link in code is enough.** The saved record normally
+wins over `DEFAULT_CLICK_URL` — that is what makes the panel authoritative — but
+a record written while an older URL was the default simply *contains* that old
+URL. `readAdSettings` therefore upgrades an exact match of a URL listed in
+`LEGACY_CLICK_URLS` to the current default on the next read (and writes it
+back), while any URL you typed yourself is left alone. So a network change is:
+replace `DEFAULT_CLICK_URL`, add the previous value to `LEGACY_CLICK_URLS`,
+deploy.
 
 ### Where adverts run
 
