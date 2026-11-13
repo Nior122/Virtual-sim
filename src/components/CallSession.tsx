@@ -132,7 +132,7 @@ export default function CallSession() {
   }, [callState]);
 
   // -------------------------------------------------------------------------
-  // Call regulator (one call per profile every 2h, five calls every 5h).
+  // Call regulator (one call per profile every 1h, five calls every 5h).
   // The server owns the numbers; this component only asks before ringing and
   // reports the call once the video is actually playing.
   // -------------------------------------------------------------------------
@@ -1868,7 +1868,7 @@ export default function CallSession() {
             retryInMs={retryInMs()}
             maxCalls={callAccess?.limits.maxCalls ?? 5}
             windowHours={callAccess?.limits.windowHours ?? 5}
-            cooldownHours={callAccess?.limits.cooldownHours ?? 2}
+            cooldownHours={callAccess?.limits.cooldownHours ?? 1}
             onMessage={() => setChatOpen(true)}
             onHome={() => {
               endCall();
@@ -2468,7 +2468,7 @@ export default function CallSession() {
                   ) : (
                     <span className="inline-flex items-center gap-1.5">
                       <Timer className="h-3.5 w-3.5" />
-                      {callAccess?.limits.cooldownHours ?? 2}h before you can call {persona?.name || "her"} again
+                      {callAccess?.limits.cooldownHours ?? 1}h before you can call {persona?.name || "her"} again
                     </span>
                   )}
                   {callAccess && (

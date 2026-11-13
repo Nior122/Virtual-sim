@@ -3,7 +3,7 @@
 //
 // Two limits, both rolling (not "reset at midnight"):
 //
-//   1. one call per profile every 2 hours — after a video finishes the call
+//   1. one call per profile every 1 hour — after a video finishes the call
 //      hangs up, and calling that same profile again shows "User Busy" with a
 //      Message button until the cooldown is over;
 //   2. five calls every 5 hours in total, across every profile — when the last
@@ -23,7 +23,7 @@ export const HOUR_MS = 60 * 60 * 1000;
 /** The two limits in one place — change these numbers, nothing else. */
 export const CALL_RULES = {
   /** A profile can be called once per this window. */
-  cooldownMs: 2 * HOUR_MS,
+  cooldownMs: 1 * HOUR_MS,
   /** The global allowance is spent over a rolling window of this length. */
   windowMs: 5 * HOUR_MS,
   /** Calls allowed inside `windowMs`. */
@@ -66,7 +66,7 @@ function clampSlug(slug: string): string {
 }
 
 /**
- * Drop calls that are older than the window. The 2-hour per-profile cooldown
+ * Drop calls that are older than the window. The 1-hour per-profile cooldown
  * is always inside the 5-hour window, so one pruned list serves both rules.
  */
 export function pruneCalls(
@@ -181,6 +181,13 @@ export function formatWait(ms: number): string {
   const days = Math.floor(hours / 24);
   const restHours = hours % 24;
   return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
+}
+
+/** "1 hour", "5 hours" — the copy under the blocked screens. */
+export function hoursLabel(hours: number): string {
+  const value = Number.isFinite(hours) ? hours : 0;
+  const text = Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
+  return `${text} hour${value === 1 ? "" : "s"}`;
 }
 
 /** Limits in the shape the API sends to the browser. */

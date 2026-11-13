@@ -1,4 +1,4 @@
-# Call limits — one call per profile every 2 hours, five calls every 5 hours
+# Call limits — one call per profile every hour, five calls every 5 hours
 
 The call screen is not unlimited any more. Two rules run together, and both
 windows **roll**: a call stops counting exactly N hours after it happened, so
@@ -6,7 +6,7 @@ nobody waits for midnight.
 
 | Rule | Limit | What the client sees |
 |---|---|---|
-| Per profile | **1 call every 2 hours** | **User Busy** screen with a countdown and only a **Message** button |
+| Per profile | **1 call every hour** | **User Busy** screen with a countdown and only a **Message** button |
 | Per client | **5 calls every 5 hours**, across every profile | **Call limit reached** screen with a countdown and only a **Message** button |
 
 Calling a *different* profile still rings — the per-profile rule only blocks the
@@ -23,7 +23,7 @@ carry on chatting with the persona.
 ```
 Call Ended
 Your conversation with Emarrb has ended.
-⏱ 2h before you can call Emarrb again · 4 of 5 calls left in the next 5h
+⏱ 1h before you can call Emarrb again · 4 of 5 calls left in the next 5h
 [ Message ]  [ Call Again ]  [ View Profile ]
 ```
 
@@ -33,9 +33,9 @@ Pressing **Call Again** asks the server, which answers "busy":
 🚫 User Busy
 Emarrb is busy right now. You can call again once the wait is over, or keep
 chatting in the meantime.
-⏱ You can call again in 1h 32m
+⏱ You can call again in 52m
 [ Message ]
-One call per profile every 2 hours.
+One call per profile every 1 hour.
 ```
 
 Only a Message button — no Call Again, no View Profile action row (the top
@@ -51,7 +51,7 @@ You have used all 5 calls for now. Calling is paused for the next 5 hours from
 your first call — you can still chat with Emarrb.
 ⏱ Calls unlock in 4h 12m
 [ Message ]
-One call per profile every 2 hours, 5 calls every 5 hours.
+One call per profile every 1 hour, 5 calls every 5 hours.
 ```
 
 `Try Again` appears once a slot is free. The countdown uses the **server's
@@ -194,7 +194,7 @@ curl -s -c /tmp/cj.txt 'http://127.0.0.1:8798/api/call-access?profile=emarrb'
 curl -s -b /tmp/cj.txt -X POST 'http://127.0.0.1:8798/api/call-access' \
   -H 'content-type: application/json' -d '{"profile":"emarrb"}'
 
-# same profile again: allowed=false, reason=profile-cooldown, retryAt ≈ +2h
+# same profile again: allowed=false, reason=profile-cooldown, retryAt ≈ +1h
 curl -s -b /tmp/cj.txt 'http://127.0.0.1:8798/api/call-access?profile=emarrb'
 
 # a different profile: still allowed
