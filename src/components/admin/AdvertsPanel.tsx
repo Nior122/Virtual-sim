@@ -8,10 +8,18 @@
 // no code is called out (it silently earns nothing), and the same snippet in
 // two slots is rejected by the API (double-firing gets accounts suspended).
 // ---------------------------------------------------------------------------
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  FlaskConical,
   ExternalLink,
   RotateCw,
   MousePointerClick,
@@ -20,6 +28,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { formatDate, getAds, saveAds } from "../../lib/admin/client";
+import { buildFrame } from "../../lib/ads/inject";
 import {
   BANNER_POSITIONS,
   DEFAULT_CLICK_URL,
@@ -59,6 +68,56 @@ const POSITION_LABEL: Record<BannerPosition, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Live preview: run the drafted snippet in a sealed frame
+//
+// "I pasted the code and nothing happened" is impossible to debug from a
+// textarea. This mounts the exact snippet the way the site will, but always in
+// the sandboxed frame, so a network that draws nothing is visible as an empty
+// box instead of a mystery.
+// ---------------------------------------------------------------------------
+function SnippetPreview({ code, height = 140 }: { code: string; height?: number }) {
+  const host = useRef<HTMLDivElement | null>(null);
+  const [runId, setRunId] = useState(0);
+  const [ran, setRan] = useState(false);
+
+  useEffect(() => {
+    const mount = host.current;
+    if (!mount) return;
+    mount.replaceChildren();
+    setRan(false);
+    if (!code.trim()) return;
+    const frame = buildFrame(code, height);
+    frame.addEventListener("load", () => setRan(true));
+    mount.appendChild(frame);
+    return () => mount.replaceChildren();
+  }, [code, height, runId]);
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <Button variant="ghost" onClick={() => setRunId((n) => n + 1)}>
+          <RefreshCw className="w-3.5 h-3.5" /> Run again
+        </Button>
+        <span className="text-[11px] text-neutral-500">
+          {ran
+            ? "Frame loaded. If it is blank, the network returned no creative for this browser — try a private window with no ad blocker."
+            : "Running…"}
+        </span>
+      </div>
+      <div
+        ref={host}
+        className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] overflow-hidden"
+        style={{ minHeight: 40 }}
+      />
+      <p className="text-[11px] text-neutral-500 mt-2 leading-relaxed">
+        Runs in an isolated frame with your own network code. It never touches the
+        chat page, and a preview may count as one request in your network dashboard.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // One ad-format card
 // ---------------------------------------------------------------------------
 function CodeCard({
@@ -88,6 +147,7 @@ function CodeCard({
 }) {
   const report = useMemo(() => snippetReport(code), [code]);
   const empty = !code.trim();
+  const [showPreview, setShowPreview] = useState(false);
 
   return (
     <Card>
@@ -123,12 +183,22 @@ function CodeCard({
         >
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
+        <Button
+          variant="ghost"
+          onClick={() => setShowPreview((v) => !v)}
+          disabled={empty}
+        >
+          <FlaskConical className="w-3.5 h-3.5" />
+          {showPreview ? "Hide test" : "Test code"}
+        </Button>
         <span className="text-[11px] text-neutral-500">
           {report.chars.toLocaleString()} characters · {report.scripts} script
           {report.scripts === 1 ? "" : "s"}
           {report.external ? ` (${report.external} external)` : ""}
         </span>
       </div>
+
+      {showPreview && !empty && <SnippetPreview code={code} />}
 
       {enabled && empty && (
         <div className="mt-3">
@@ -233,6 +303,15 @@ export default function AdvertsPanel() {
 
   const clickOn = draft.enabled && draft.click.mode !== "off" && !!draft.click.url;
 
+  // Formats the owner switched on but left without code: on paper "live", in
+  // reality invisible. This is the state that produces "the adverts are not
+  // showing".
+  const idle = [
+    draft.popunder.enabled && !draft.popunder.code.trim() ? "pop-under" : null,
+    draft.socialBar.enabled && !draft.socialBar.code.trim() ? "social bar" : null,
+    draft.native.enabled && !draft.native.code.trim() ? "native banner" : null,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="space-y-5">
       {/* Status */}
@@ -292,6 +371,42 @@ export default function AdvertsPanel() {
             : "No third-party code is running — only the send-button click-through."}{" "}
           Last saved {formatDate(settings.updatedAt)}
         </p>
+
+        {draft.enabled && idle.length > 0 && (
+          <div className="mt-3">
+            <Notice kind="warn">
+              {idle.length === 3 ? "All three" : idle.length === 2 ? "Two" : "One"} of
+              the three code formats{" "}
+              {idle.length === 1 ? "is" : "are"} switched on but empty
+              ({idle.join(", ")}), so visitors see nothing from{" "}
+              {idle.length === 1 ? "it" : "them"}. Paste the code your network
+              gives you into the box below and press Save.
+            </Notice>
+          </div>
+        )}
+
+        <details className="mt-3 text-[11px] text-neutral-500">
+          <summary className="cursor-pointer select-none">
+            An advert is still not showing — how do I find out why?
+          </summary>
+          <div className="mt-2 space-y-1.5 leading-relaxed">
+            <p>
+              Open the live site, then the browser console (F12), and run{" "}
+              <code className="text-neutral-300">__dgAds()</code>. It lists every
+              format and the exact reason it did or did not run:{" "}
+              <code className="text-neutral-300">empty-code</code>,{" "}
+              <code className="text-neutral-300">disabled</code>,{" "}
+              <code className="text-neutral-300">not-allowed-on-route</code>,{" "}
+              <code className="text-neutral-300">capped</code> or{" "}
+              <code className="text-neutral-300">injected</code>.
+            </p>
+            <p>
+              A snippet that is only <code className="text-neutral-300">&lt;script src&gt;</code>{" "}
+              is fine — it is injected as a real script tag, so it runs. Use{" "}
+              <strong>Test code</strong> above to see the creative before saving.
+            </p>
+          </div>
+        </details>
 
         {!draft.enabled && (
           <div className="mt-3">

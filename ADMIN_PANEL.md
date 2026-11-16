@@ -486,6 +486,38 @@ plus maybe an `<ins>` or a `<div>`.
   box, which is then resized to the advert's real height.
 - The **same snippet in two slots** is refused: firing one campaign twice is
   what gets accounts suspended. One format, one snippet.
+- **Test code** runs the snippet in a small sealed frame right in the panel, so
+  you can see whether the network actually drew something before you save. If
+  the box stays empty, the network returned nothing for that browser (ad
+  blocker, unsupported region, or a campaign that has not been approved yet) —
+  it is not the site.
+- A snippet that is **only** `<script src="…"></script>` is fine. It is
+  re-created as a real script element, so it runs. (Parsing the string as a
+  fragment used to send a leading `<script>` into `<head>`, where the site never
+  looked; that silently dropped exactly the tags most networks hand out.)
+
+### "The adverts are not showing"
+
+Work down this list — the first two cover almost every report:
+
+1. **Is the slot switched on *and* filled?** A slot with the switch on and an
+   empty box shows nothing at all. The tab warns about it at the top of the
+   page ("…switched on but empty"), and the badge on each card reads **empty**.
+2. **Is the master switch on, and is the visitor on a page you allowed?** The
+   three inserted formats only run on *Home + browse* or *Profile + chat*
+   routes; `/admin` never runs them.
+3. **Did the network return anything?** Press **Test code**. A blank frame means
+   the network answered with nothing — ad blocker, region, or an unapproved
+   campaign.
+4. **Still nothing?** On the live site open the browser console and run
+   `__dgAds()`. It returns one entry per format with the reason it did or did
+   not run: `injected`, `empty-code`, `disabled`, `not-allowed-on-route`,
+   `capped`, `dismissed`, `already-fired`. `injected` with a zero-node count
+   means the snippet ran but drew nothing.
+
+Pop-unders are also **capped per visit**: `4` per session, `60` seconds apart by
+default. Once the cap is reached the console reports `capped` — that is working
+as intended, not a fault.
 
 ### How a placed banner looks
 
