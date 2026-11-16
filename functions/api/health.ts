@@ -40,6 +40,8 @@ const FEATURES = [
   "view-all-manager-link",
   "advert-click-url-refresh",
   "hourly-call-cooldown",
+  "advert-script-only-snippets",
+  "advert-diagnostics",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

@@ -22,6 +22,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { getAdSettings } from "../lib/ads/client";
+import { mountSnippet } from "../lib/ads/inject";
 import {
   placementAllowed,
   placementFor,
@@ -41,88 +42,46 @@ const DISMISS_KEY = "dg:ad-native-off";
  */
 const fired = new Set<string>();
 
-// ---------------------------------------------------------------------------
-// Injecting a pasted snippet
-// ---------------------------------------------------------------------------
-/** Copy a parsed node into the live document, re-creating `<script>` tags. */
-function revive(node: Node, doc: Document): Node {
-  if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "SCRIPT") {
-    const original = node as HTMLScriptElement;
-    const script = doc.createElement("script");
-    for (const attribute of Array.from(original.attributes)) {
-      script.setAttribute(attribute.name, attribute.value);
-    }
-    // Keep source order: an inline call must run after the library it needs.
-    if (script.src && !original.hasAttribute("async")) script.async = false;
-    script.text = original.textContent || "";
-    return script;
-  }
+/**
+ * Why each format did or did not inject.
+ *
+ * "The adverts are not showing" has a small number of causes, and from the
+ * outside they look identical — an empty page. Recording the verdict lets the
+ * owner read `__dgAds()` in the browser console (and the admin panel show it)
+ * instead of guessing whether the code was missing, the placement was off, or
+ * the snippet was capped for this visit.
+ */
+export type AdVerdict =
+  | "injected"
+  | "empty-code"
+  | "disabled"
+  | "already-fired"
+  | "capped"
+  | "not-allowed-on-route"
+  | "dismissed";
 
-  const copy = doc.importNode(node, false);
-  const target = copy as unknown as ParentNode;
-  originalChildren(node).forEach((child) => {
-    target.appendChild(revive(child, doc));
-  });
-  return copy;
+export type AdKind = "popunder" | "socialBar" | "native" | "placement";
+
+export interface AdReport {
+  kind: AdKind;
+  verdict: AdVerdict;
+  detail?: string;
+  scripts?: number;
+  framed?: boolean;
+  at: number;
 }
 
-function originalChildren(node: Node): Node[] {
-  const list: Node[] = [];
-  node.childNodes.forEach((child) => list.push(child));
-  return list;
+const report: AdReport[] = [];
+
+function note(entry: Omit<AdReport, "at">): void {
+  report.push({ ...entry, at: Date.now() });
 }
 
-/** Sandboxed frame for snippets that would otherwise `document.write` the page away. */
-function buildFrame(code: string, height: number): HTMLIFrameElement {
-  const frame = document.createElement("iframe");
-  frame.title = "Advertisement";
-  frame.setAttribute("scrolling", "no");
-  // Pop-ups and forms work (that is what a pop-under is); navigating the page
-  // that hosts the frame does not.
-  frame.setAttribute(
-    "sandbox",
-    "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
-  );
-  frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
-  frame.style.cssText = `display:block;border:0;width:100%;height:${height}px;overflow:hidden;background:transparent;`;
-  frame.srcdoc =
-    "<!doctype html><html><head><meta charset=\"utf-8\">" +
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-    "<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}</style>" +
-    `</head><body>${code}</body></html>`;
-
-  // srcdoc frames are same-origin, so the ad's real height can be measured and
-  // the frame grown instead of clipping the creative.
-  frame.addEventListener("load", () => {
-    const measure = () => {
-      try {
-        const body = frame.contentDocument?.body;
-        if (!body) return;
-        const next = Math.max(body.scrollHeight, body.offsetHeight);
-        if (next > 20 && next < 700 && Math.abs(next - height) > 8) {
-          frame.style.height = `${next}px`;
-        }
-      } catch {
-        /* the frame navigated away: keep the default height */
-      }
-    };
-    measure();
-    window.setTimeout(measure, 1500);
-  });
-
-  return frame;
-}
-
-function mountSnippet(host: HTMLElement, code: string, frameHeight: number): void {
-  host.replaceChildren();
-  if (/document\s*\.\s*write\s*\(/i.test(code)) {
-    host.appendChild(buildFrame(code, frameHeight));
-    return;
-  }
-  const parsed = new DOMParser().parseFromString(code, "text/html");
-  originalChildren(parsed.body).forEach((node) => {
-    host.appendChild(revive(node, document));
-  });
+// Always available, even before the first verdict is recorded, so the console
+// helper never reads `undefined`.
+if (typeof window !== "undefined") {
+  (window as unknown as { __dgAds?: () => AdReport[] }).__dgAds = () =>
+    report.slice();
 }
 
 /** A zero-height mount point for formats that draw themselves. */
@@ -254,34 +213,69 @@ export default function AdSlots() {
   // Fire the self-drawing formats once, when the visitor is on a page the
   // owner allows, and never during the first paint.
   useEffect(() => {
-    if (!settings || !allowed) return;
+    if (!settings) return;
+    if (!allowed) {
+      note({ kind: "placement", verdict: "not-allowed-on-route", detail: placement });
+      return;
+    }
 
     let cancelled = false;
     const start = () => {
       if (cancelled) return;
 
       const fire = (kind: "popunder" | "socialBar", slot: AdSlot) => {
-        if (fired.has(kind) || !slot.enabled) return;
+        if (!slot.enabled) {
+          note({ kind, verdict: "disabled" });
+          return;
+        }
+        if (fired.has(kind)) {
+          note({ kind, verdict: "already-fired" });
+          return;
+        }
         const code = slot.code.trim();
-        if (!code) return;
-        if (kind === "popunder" && !popunderBudget(settings.limits)) return;
+        if (!code) {
+          // The switch is on but the box is empty: nothing to show.
+          note({ kind, verdict: "empty-code" });
+          return;
+        }
+        if (kind === "popunder" && !popunderBudget(settings.limits)) {
+          note({ kind, verdict: "capped", detail: "per-session cap or cooldown" });
+          return;
+        }
         fired.add(kind);
-        mountSnippet(globalHost(kind), code, 1);
+        const result = mountSnippet(globalHost(kind), code, 1);
+        note({
+          kind,
+          verdict: "injected",
+          scripts: result.scripts,
+          framed: result.framed,
+          detail: `${result.nodes} node(s)`,
+        });
       };
 
       fire("popunder", settings.popunder);
       fire("socialBar", settings.socialBar);
 
       const banner = settings.native;
-      if (
-        !fired.has("native") &&
-        banner.enabled &&
-        banner.code.trim() &&
-        !nativeDismissed()
-      ) {
+      if (!banner.enabled) {
+        note({ kind: "native", verdict: "disabled" });
+      } else if (!banner.code.trim()) {
+        note({ kind: "native", verdict: "empty-code" });
+      } else if (nativeDismissed()) {
+        note({ kind: "native", verdict: "dismissed" });
+      } else if (fired.has("native")) {
+        note({ kind: "native", verdict: "already-fired" });
+      } else {
         fired.add("native");
         const { slot } = ensureNative(banner.position);
-        mountSnippet(slot, banner.code.trim(), 110);
+        const result = mountSnippet(slot, banner.code.trim(), 110);
+        note({
+          kind: "native",
+          verdict: "injected",
+          scripts: result.scripts,
+          framed: result.framed,
+          detail: `${result.nodes} node(s) @ ${banner.position}`,
+        });
       }
     };
 
