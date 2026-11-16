@@ -98,7 +98,15 @@ export interface AdSettings {
   placements: { home: boolean; profiles: boolean };
   popunder: AdSlot;
   socialBar: AdSlot;
-  native: AdSlot & { position: BannerPosition };
+  native: AdSlot & {
+    /**
+     * @deprecated The banner is always rendered in the page flow, directly
+     * above the footer. This field is still stored (and still validated) so old
+     * KV records keep loading, but nothing reads it: a pinned bar landed on top
+     * of the content and read as "stuck in the middle, cannot scroll".
+     */
+    position: BannerPosition;
+  };
   house: HouseBanner;
   limits: {
     /** How many pop-unders one visitor may get per browser session. */

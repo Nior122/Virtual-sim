@@ -454,8 +454,11 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* In-page advert: owner's network code, or the house banner. */}
-      <NativeAd />
+      {/* In-page advert: owner's network code, or the house banner. Sits in the
+          normal flow at the bottom of the page, directly above the footer. */}
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <NativeAd />
+      </div>
 
       <Footer />
     </div>

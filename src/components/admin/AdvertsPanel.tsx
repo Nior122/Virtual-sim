@@ -30,7 +30,6 @@ import {
 import { formatDate, getAds, saveAds } from "../../lib/admin/client";
 import { buildFrame } from "../../lib/ads/inject";
 import {
-  BANNER_POSITIONS,
   DEFAULT_CLICK_URL,
   HOUSE_TEXT_LIMITS,
   POPUNDER_MAX_COOLDOWN_SECONDS,
@@ -39,7 +38,6 @@ import {
   snippetReport,
   usesHouseBanner,
   type AdSettings,
-  type BannerPosition,
   type ClickMode,
 } from "../../lib/ads/config";
 import {
@@ -63,11 +61,6 @@ const CLICK_MODE_LABEL: Record<ClickMode, string> = {
   off: "Never — the send button only sends",
 };
 
-const POSITION_LABEL: Record<BannerPosition, string> = {
-  inline: "Inline — under the page content (never covers the chat)",
-  "fixed-bottom": "Pinned to the bottom of the screen",
-  "fixed-top": "Pinned to the top of the screen",
-};
 
 // ---------------------------------------------------------------------------
 // Live preview: run the drafted snippet in a sealed frame
@@ -738,45 +731,17 @@ export default function AdvertsPanel() {
         busy={busy === "native"}
       >
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
-          <Field
-            label="Position"
-            hint="Inline puts the banner inside the page it belongs to — under the hero on the home page, above the profile details. A pinned bar sits under the navigation bar (never over it) and keeps a small × to dismiss it."
-          >
-            <Select
-              value={draft.native.position}
-              onChange={(event) =>
-                patchDraft({
-                  native: {
-                    ...draft.native,
-                    position: event.target.value as BannerPosition,
-                  },
-                })
-              }
-            >
-              {BANNER_POSITIONS.map((position) => (
-                <option key={position} value={position}>
-                  {POSITION_LABEL[position]}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            <strong className="text-neutral-200">Where it appears:</strong> at the
+            bottom of every page — home, browse and each profile — directly above
+            the footer, in the normal flow, so it scrolls with the content like any
+            other block. It is never pinned over the page.
+          </p>
           <p className="text-[11px] text-neutral-500 mt-2 leading-relaxed">
             The banner is placed bare: no “Advertisement” label, no border, no
             background, no shadow. Whatever frame you see comes from the network's
-            own creative. It is rendered inside the page — home, browse and every
-            profile — so it is read instead of being appended after the footer.
+            own creative.
           </p>
-          {(draft.native.position === "fixed-bottom" ||
-            draft.native.position === "fixed-top") && (
-            <div className="mt-2">
-              <Notice kind="warn">
-                A pinned banner sits on the page instead of flowing with it. It now
-                has no border, background or label — just a discreet corner × so a
-                visitor can clear it off the message box; that dismissal lasts for
-                their session.
-              </Notice>
-            </div>
-          )}
         </div>
       </CodeCard>
 
@@ -841,7 +806,7 @@ export default function AdvertsPanel() {
         <div className="mt-4">
           <p className="text-[11px] text-neutral-500 mb-2">Preview</p>
           <div className="rounded-2xl bg-[#0b0d16] p-3">
-            <div className="w-full rounded-2xl border border-white/[0.08] bg-[#0c0e18] px-5 py-4">
+            <div className="w-full px-1 py-2">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="text-base font-bold text-white tracking-tight">
