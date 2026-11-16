@@ -427,7 +427,7 @@ Four slots, each with its own switch:
 | **Send-message button** | The link that opens when a visitor presses the send arrow inside a profile inbox | Chat screen |
 | **Pop-under** | The network's popunder script (opens behind the page) | Once per visit, capped |
 | **Social bar** | The sliding bar that stays on screen | Once per visit |
-| **Native banner** | The in-page "sponsored" block | Wherever you place it |
+| **Built-in banner** | The site's own fallback creative (headline + button) | Wherever the native banner is placed, until real code is pasted |
 
 ### The send button
 
@@ -496,6 +496,39 @@ plus maybe an `<ins>` or a `<div>`.
   fragment used to send a leading `<script>` into `<head>`, where the site never
   looked; that silently dropped exactly the tags most networks hand out.)
 
+### The built-in banner
+
+An empty code box used to mean an empty slot. Now, when the **native banner** is
+switched on with no code, the site draws its own banner instead: a headline, one
+supporting line and a button that opens the same click-through URL as the send
+button. It needs no network account, so the position earns from the first
+visitor, and the moment you paste real network code it is replaced silently.
+
+Edit it under **Built-in banner**: headline, supporting line, button label, with
+a live preview. Wording that is too long is trimmed rather than breaking the
+layout, and an empty field falls back to the default instead of showing a blank
+banner.
+
+This is also the honest answer to "the native banner is not showing": with the
+box empty and the built-in banner switched **off**, there is genuinely nothing to
+draw. Both must be on for any banner to appear.
+
+### Where the banner is placed
+
+The native banner is rendered **inside the page**, not appended after the
+footer:
+
+- home page — under the hero, above the feature sections;
+- browse page — under the filters, above the profile grid;
+- every profile page — directly under the profile header, above the tabs.
+
+An **inline** banner flows in that position and covers nothing. A **pinned**
+(top/bottom) banner floats in the same place as an overlay, is capped at the
+content width, starts **below the navigation bar** (never over it) and keeps a
+small `×` that dismisses it for the visitor's session. Both were wrong before:
+the pinned bar sat at `z-index:45` while the navigation bar is `z-50`, so a
+pinned banner rendered *behind* it and was never seen.
+
 ### "The adverts are not showing"
 
 Work down this list — the first two cover almost every report:
@@ -511,13 +544,24 @@ Work down this list — the first two cover almost every report:
    campaign.
 4. **Still nothing?** On the live site open the browser console and run
    `__dgAds()`. It returns one entry per format with the reason it did or did
-   not run: `injected`, `empty-code`, `disabled`, `not-allowed-on-route`,
-   `capped`, `dismissed`, `already-fired`. `injected` with a zero-node count
-   means the snippet ran but drew nothing.
+   not run: `injected`, `house-fallback`, `empty-code`, `disabled`,
+   `not-allowed-on-route`, `capped`, `dismissed`, `already-fired`,
+   `no-advert-on-page`, `no-link`. `injected` with a zero-node count means the
+   snippet ran but drew nothing.
 
 Pop-unders are also **capped per visit**: `4` per session, `60` seconds apart by
 default. Once the cap is reached the console reports `capped` — that is working
 as intended, not a fault.
+
+A pop-under is only opened on a page that is already showing an advert (pasted
+code or the built-in banner). Opening one behind a page with nothing on it costs
+the visitor's trust and earns nothing, so the site records
+`no-advert-on-page` and stays quiet instead.
+
+It opens **once per page** and never twice on the same page. Because visitors
+move around the site, the per-session cap of four is now actually reachable —
+before, a pop-under fired once per browser load and the cap was decorative. The
+cool-down between two opens still applies across those pages.
 
 ### How a placed banner looks
 

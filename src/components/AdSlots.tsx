@@ -18,70 +18,73 @@
 //     paint of the chat.
 //   • Placement is decided per route by the same helper the admin panel uses
 //     to preview it, so what the owner reads is what happens.
+//   • The native banner does not live here. It is an in-page component
+//     (`NativeAd`) so it sits *inside* the content the visitor is reading
+//     instead of being appended after the footer, and so React re-renders it
+//     when the owner changes the copy — an injected node cannot do either.
 // ---------------------------------------------------------------------------
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { getAdSettings } from "../lib/ads/client";
 import { mountSnippet } from "../lib/ads/inject";
 import {
+  installAdDiagnostics,
+  noteAd,
+  type AdFormat,
+  type AdVerdict,
+} from "../lib/ads/diag";
+import {
   placementAllowed,
   placementFor,
   type AdPlacement,
   type AdSettings,
   type AdSlot,
-  type BannerPosition,
 } from "../lib/ads/config";
 
-const NATIVE_ID = "dg-ad-native";
 const POP_KEY = "dg:ad-pop";
-const DISMISS_KEY = "dg:ad-native-off";
 
 /**
+ * What has already fired on this page load.
+ *
  * Module scope on purpose: it survives the effect cleanup that StrictMode and
  * every route change perform, so an impression is only ever counted once.
+ *
+ *   social bar → once per page load (it is a bar that stays on screen)
+ *   pop-under  → once per *route*, so the owner's per-session cap is reachable;
+ *                the cap and the cool-down still decide whether it actually
+ *                opens. Firing once per load made a cap of four meaningless.
  */
 const fired = new Set<string>();
 
+/** The key an impression is counted under. */
+function impressionKey(format: "popunder" | "socialBar", pathname: string): string {
+  return format === "popunder" ? `popunder:${pathname}` : "socialBar";
+}
+
 /**
- * Why each format did or did not inject.
+ * Which route has an advert on it (the in-page banner counting the house
+ * creative)?
  *
- * "The adverts are not showing" has a small number of causes, and from the
- * outside they look identical — an empty page. Recording the verdict lets the
- * owner read `__dgAds()` in the browser console (and the admin panel show it)
- * instead of guessing whether the code was missing, the placement was off, or
- * the snippet was capped for this visit.
+ * A pop-under that opens *behind a page with no advert on it* is the worst
+ * trade the site can make: the visitor gets the interruption, the page gets
+ * nothing. The pop-under therefore waits until an advert is visible on **this**
+ * route, which is also what the better networks expect when they audit
+ * placements.
+ *
+ * The route is part of the answer on purpose: a module-level boolean survives
+ * every SPA navigation, so a visitor who left an advert-covered page could
+ * otherwise be interrupted on a call screen that shows nothing.
  */
-export type AdVerdict =
-  | "injected"
-  | "empty-code"
-  | "disabled"
-  | "already-fired"
-  | "capped"
-  | "not-allowed-on-route"
-  | "dismissed";
+let onPageAdvertPath: string | null = null;
 
-export type AdKind = "popunder" | "socialBar" | "native" | "placement";
-
-export interface AdReport {
-  kind: AdKind;
-  verdict: AdVerdict;
-  detail?: string;
-  scripts?: number;
-  framed?: boolean;
-  at: number;
+/** Called by the in-page banner as it mounts. */
+export function markOnPageAdvert(path: string): void {
+  onPageAdvertPath = path;
 }
 
-const report: AdReport[] = [];
-
-function note(entry: Omit<AdReport, "at">): void {
-  report.push({ ...entry, at: Date.now() });
-}
-
-// Always available, even before the first verdict is recorded, so the console
-// helper never reads `undefined`.
-if (typeof window !== "undefined") {
-  (window as unknown as { __dgAds?: () => AdReport[] }).__dgAds = () =>
-    report.slice();
+/** Called when a route stops rendering the banner. */
+export function clearOnPageAdvert(path: string): void {
+  if (onPageAdvertPath === path) onPageAdvertPath = null;
 }
 
 /** A zero-height mount point for formats that draw themselves. */
@@ -97,94 +100,50 @@ function globalHost(kind: string): HTMLElement {
 }
 
 /**
- * The wrapper carries no frame of its own: no background, no border, no shadow,
- * no label. A banner should read as part of the page, not as a boxed-off slot,
- * and the creative the network renders supplies its own styling.
+ * How many pop-unders this visitor may still get, and whether the cooldown has
+ * passed.
+ *
+ * The cap is per *browser session* (the tab is closed and the count starts
+ * again), so it is read and written only when a pop-under is actually about to
+ * fire. Asking the question without consuming a slot is what lets the
+ * component wait for an advert to be on the page first — the generous version
+ * of this function silently burned a visitor's whole allowance on pages that
+ * showed them nothing.
  */
-function nativeStyle(position: BannerPosition): string {
-  if (position === "fixed-top") {
-    return "position:fixed;left:0;right:0;top:0;z-index:45;background:transparent;padding:0;box-sizing:border-box;";
+function popunderBudget(limits: AdSettings["limits"]): {
+  allowed: boolean;
+  why?: string;
+} {
+  if (limits.popunderPerSession <= 0) {
+    return { allowed: false, why: "cap is 0 per session" };
   }
-  if (position === "fixed-bottom") {
-    return "position:fixed;left:0;right:0;bottom:0;z-index:45;background:transparent;padding:0 0 env(safe-area-inset-bottom);box-sizing:border-box;";
-  }
-  return "width:100%;max-width:760px;margin:18px auto 26px;padding:0 12px;box-sizing:border-box;";
-}
-
-function ensureNative(position: BannerPosition): { host: HTMLElement; slot: HTMLElement } {
-  const existing = document.getElementById(NATIVE_ID);
-  if (existing) {
-    const slot = existing.querySelector<HTMLElement>("[data-dg-ad-slot]");
-    if (slot) return { host: existing, slot };
-  }
-
-  const host = document.createElement("div");
-  host.id = NATIVE_ID;
-  // Screen readers still get a name; nothing visible is added to the page.
-  host.setAttribute("role", "complementary");
-  host.setAttribute("aria-label", "Sponsored content");
-  host.style.cssText = nativeStyle(position);
-
-  const slot = document.createElement("div");
-  slot.setAttribute("data-dg-ad-slot", "native");
-  slot.style.cssText = "min-height:1px;";
-
-  host.appendChild(slot);
-
-  // A pinned banner sits on top of the page, so it keeps one discreet escape:
-  // a bare ✕ in its corner, no background or border. An inline banner covers
-  // nothing and gets no chrome at all.
-  if (position !== "inline") {
-    const close = document.createElement("button");
-    close.type = "button";
-    close.textContent = "\u00d7";
-    close.setAttribute("aria-label", "Hide sponsored content");
-    close.style.cssText =
-      "position:absolute;top:1px;right:3px;z-index:1;background:none;" +
-      "border:0;color:inherit;opacity:.35;" +
-      "font:400 13px/1 ui-sans-serif,system-ui,sans-serif;" +
-      "line-height:1;cursor:pointer;padding:2px 4px;";
-    close.addEventListener("click", () => {
-      try {
-        window.sessionStorage.setItem(DISMISS_KEY, "1");
-      } catch {
-        /* storage disabled: hiding is still fine for this page */
-      }
-      host.style.display = "none";
-    });
-    host.appendChild(close);
-  }
-
-  document.body.appendChild(host);
-  return { host, slot };
-}
-
-function nativeDismissed(): boolean {
-  try {
-    return window.sessionStorage.getItem(DISMISS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Count this visitor's pop-under against the owner's cap before firing. */
-function popunderBudget(limits: AdSettings["limits"]): boolean {
-  if (limits.popunderPerSession <= 0) return false;
   try {
     const now = Date.now();
     const raw = window.sessionStorage.getItem(POP_KEY);
     const state = raw ? (JSON.parse(raw) as { count?: number; at?: number }) : {};
     const count = Number(state.count) || 0;
     const at = Number(state.at) || 0;
-    if (count >= limits.popunderPerSession) return false;
-    if (at && now - at < limits.popunderCooldownSeconds * 1000) return false;
+    if (count >= limits.popunderPerSession) {
+      return {
+        allowed: false,
+        why: `session cap reached (${count}/${limits.popunderPerSession})`,
+      };
+    }
+    if (at && now - at < limits.popunderCooldownSeconds * 1000) {
+      const left = Math.ceil(
+        (limits.popunderCooldownSeconds * 1000 - (now - at)) / 1000
+      );
+      return { allowed: false, why: `cooldown, ${left}s left` };
+    }
     window.sessionStorage.setItem(
       POP_KEY,
       JSON.stringify({ count: count + 1, at: now })
     );
-    return true;
+    return { allowed: true };
   } catch {
-    return true;
+    // Storage blocked (private mode, a strict browser): a pop-under is still
+    // better than none, and the per-page `fired` guard stops repeats.
+    return { allowed: true };
   }
 }
 
@@ -197,6 +156,10 @@ export default function AdSlots() {
 
   const placement: AdPlacement = placementFor(pathname);
   const allowed = settings ? placementAllowed(settings, placement) : false;
+
+  useEffect(() => {
+    installAdDiagnostics();
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -215,101 +178,111 @@ export default function AdSlots() {
   useEffect(() => {
     if (!settings) return;
     if (!allowed) {
-      note({ kind: "placement", verdict: "not-allowed-on-route", detail: placement });
+      noteAd({
+        format: "placement",
+        verdict: "not-allowed-on-route",
+        detail: placement,
+      });
       return;
     }
 
     let cancelled = false;
-    const start = () => {
-      if (cancelled) return;
+    let idleHandle = 0;
+    let waitTimer = 0;
 
-      const fire = (kind: "popunder" | "socialBar", slot: AdSlot) => {
-        if (!slot.enabled) {
-          note({ kind, verdict: "disabled" });
-          return;
-        }
-        if (fired.has(kind)) {
-          note({ kind, verdict: "already-fired" });
-          return;
-        }
-        const code = slot.code.trim();
-        if (!code) {
-          // The switch is on but the box is empty: nothing to show.
-          note({ kind, verdict: "empty-code" });
-          return;
-        }
-        if (kind === "popunder" && !popunderBudget(settings.limits)) {
-          note({ kind, verdict: "capped", detail: "per-session cap or cooldown" });
-          return;
-        }
-        fired.add(kind);
-        const result = mountSnippet(globalHost(kind), code, 1);
-        note({
-          kind,
-          verdict: "injected",
-          scripts: result.scripts,
-          framed: result.framed,
-          detail: `${result.nodes} node(s)`,
-        });
+    const fire = (
+      format: "popunder" | "socialBar",
+      slot: AdSlot
+    ): "wait" | undefined => {
+      const verdict = (v: AdVerdict, detail?: string): undefined => {
+        noteAd({ format, verdict: v, detail });
+        return undefined;
       };
 
-      fire("popunder", settings.popunder);
-      fire("socialBar", settings.socialBar);
+      const key = impressionKey(format, pathname);
+      if (!slot.enabled) return verdict("disabled");
+      if (fired.has(key)) return verdict("already-fired");
 
-      const banner = settings.native;
-      if (!banner.enabled) {
-        note({ kind: "native", verdict: "disabled" });
-      } else if (!banner.code.trim()) {
-        note({ kind: "native", verdict: "empty-code" });
-      } else if (nativeDismissed()) {
-        note({ kind: "native", verdict: "dismissed" });
-      } else if (fired.has("native")) {
-        note({ kind: "native", verdict: "already-fired" });
+      const code = slot.code.trim();
+      if (!code) {
+        // The switch is on but the box is empty. Recording the reason is all
+        // this format can do: it draws itself, so there is nothing to show in
+        // its place (the in-page banner covers that).
+        return verdict("empty-code");
+      }
+
+      if (format === "popunder") {
+        if (onPageAdvertPath !== pathname) {
+          // Nothing is on the page yet: hold the interruption back and try
+          // again shortly. Calling `popunderBudget` here would spend the slot.
+          return "wait";
+        }
+        const budget = popunderBudget(settings.limits);
+        if (!budget.allowed) return verdict("capped", budget.why);
+      }
+
+      fired.add(key);
+      const result = mountSnippet(globalHost(format), code, 1);
+      noteAd({
+        format,
+        verdict: "injected",
+        scripts: result.scripts,
+        framed: result.framed,
+        detail: `${result.nodes} node(s)`,
+      });
+    };
+
+    /** Returns "wait" when the pop-under is holding for an on-page advert. */
+    const attempt = (): "wait" | void => {
+      fire("socialBar", settings.socialBar);
+      const state = fire("popunder", settings.popunder);
+      if (state === "wait") return "wait";
+    };
+
+    const schedule = (delay: number) => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleHandle = window.requestIdleCallback(run, { timeout: 2000 });
       } else {
-        fired.add("native");
-        const { slot } = ensureNative(banner.position);
-        const result = mountSnippet(slot, banner.code.trim(), 110);
-        note({
-          kind: "native",
-          verdict: "injected",
-          scripts: result.scripts,
-          framed: result.framed,
-          detail: `${result.nodes} node(s) @ ${banner.position}`,
-        });
+        waitTimer = window.setTimeout(run, delay);
       }
     };
 
-    const idle = (
-      window as unknown as {
-        requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
-        cancelIdleCallback?: (handle: number) => void;
+    const run = () => {
+      if (cancelled) return;
+      if (attempt() === "wait") {
+        // An advert is being drawn right now (the banner mounts on the same
+        // pass), so a short second look is enough; after that the page simply
+        // has no advert and the pop-under stays quietly unfired.
+        waitTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          if (attempt() === "wait") {
+            noteAd({
+              format: "popunder",
+              verdict: "no-advert-on-page",
+              detail: "held back so the page is never interrupted for nothing",
+            });
+          }
+        }, 800);
+        return;
       }
-    );
-    let handle: number;
-    if (typeof idle.requestIdleCallback === "function") {
-      handle = idle.requestIdleCallback(start, { timeout: 2000 });
-    } else {
-      handle = window.setTimeout(start, 1200);
-    }
+    };
+
+    schedule(1200);
 
     return () => {
       cancelled = true;
-      if (typeof idle.requestIdleCallback === "function") {
-        idle.cancelIdleCallback?.(handle);
-      } else {
-        window.clearTimeout(handle);
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleHandle);
       }
+      window.clearTimeout(waitTimer);
     };
-  }, [settings, allowed]);
+  }, [settings, allowed, placement]);
 
-  // Once injected, a banner stays injected (re-injecting would count a second
-  // impression). It is only hidden when the current route is not covered by the
-  // owner's placement rules.
+  // A route with no advert in the page (a call, a 404) must not keep a stale
+  // "an advert is visible" flag — the pop-under would fire behind a blank page.
   useEffect(() => {
-    const host = document.getElementById(NATIVE_ID);
-    if (!host) return;
-    host.style.display = allowed && !nativeDismissed() ? "" : "none";
-  }, [allowed, pathname]);
+    return () => clearOnPageAdvert(pathname);
+  }, [pathname]);
 
   return null;
 }

@@ -74,6 +74,22 @@ export interface AdSlot {
   code: string;
 }
 
+/**
+ * The built-in banner shown when a code box is empty.
+ *
+ * A network snippet is the best creative the site can run, but an empty slot
+ * earns exactly nothing. This fallback is drawn by the site itself and points
+ * at the owner's own click-through link, so a format that is switched on always
+ * shows something — and it disappears the moment real network code is pasted.
+ * The copy is the owner's: headline, one supporting line, and the button label.
+ */
+export interface HouseBanner {
+  enabled: boolean;
+  headline: string;
+  body: string;
+  cta: string;
+}
+
 export interface AdSettings {
   /** Master switch: false silences every slot, including the send button. */
   enabled: boolean;
@@ -83,6 +99,7 @@ export interface AdSettings {
   popunder: AdSlot;
   socialBar: AdSlot;
   native: AdSlot & { position: BannerPosition };
+  house: HouseBanner;
   limits: {
     /** How many pop-unders one visitor may get per browser session. */
     popunderPerSession: number;
@@ -94,6 +111,20 @@ export interface AdSettings {
 export const POPUNDER_MAX_PER_SESSION = 10;
 export const POPUNDER_MAX_COOLDOWN_SECONDS = 600;
 
+/** A pasted-copy field longer than this is trimmed, not rejected. */
+export const HOUSE_TEXT_LIMITS = {
+  headline: 80,
+  body: 200,
+  cta: 24,
+} as const;
+
+export const DEFAULT_HOUSE_BANNER: HouseBanner = {
+  enabled: true,
+  headline: "Want to meet someone new tonight?",
+  body: "Verified companions are online right now — start a private video call in minutes.",
+  cta: "See who's online",
+};
+
 export function defaultAdSettings(): AdSettings {
   return {
     enabled: true,
@@ -103,6 +134,7 @@ export function defaultAdSettings(): AdSettings {
     popunder: { enabled: false, code: "" },
     socialBar: { enabled: false, code: "" },
     native: { enabled: false, code: "", position: "inline" },
+    house: { ...DEFAULT_HOUSE_BANNER },
     limits: { popunderPerSession: 3, popunderCooldownSeconds: 60 },
   };
 }
@@ -137,6 +169,25 @@ function clampInt(
 export function cleanSnippet(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.replace(/\u0000/g, "").slice(0, MAX_SNIPPET_CHARS);
+}
+
+/**
+ * One line of owner-written copy.
+ *
+ * Newlines and runs of spaces collapse: a headline is rendered in a fixed-size
+ * card, so a stray paste with line breaks would either overflow or push the
+ * button off-screen. An empty result falls back instead of rendering a blank
+ * banner.
+ */
+export function cleanCopy(value: unknown, fallback: string, max: number): string {
+  if (typeof value !== "string") return fallback;
+  const text = value
+    .replace(/\u0000/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+    .trim();
+  return text || fallback;
 }
 
 /** True when the string is an absolute http(s) URL. */
@@ -198,6 +249,7 @@ export function normaliseAdSettings(
 
   const placements = bag(source.placements);
   const native = bag(source.native);
+  const house = bag(source.house);
   const limits = bag(source.limits);
 
   return {
@@ -224,6 +276,16 @@ export function normaliseAdSettings(
           ? base.native.code
           : cleanSnippet(native.code),
       position: oneOf(native.position, BANNER_POSITIONS, base.native.position),
+    },
+    house: {
+      enabled: bool(house.enabled, base.house.enabled),
+      headline: cleanCopy(
+        house.headline,
+        base.house.headline,
+        HOUSE_TEXT_LIMITS.headline
+      ),
+      body: cleanCopy(house.body, base.house.body, HOUSE_TEXT_LIMITS.body),
+      cta: cleanCopy(house.cta, base.house.cta, HOUSE_TEXT_LIMITS.cta),
     },
     limits: {
       popunderPerSession: clampInt(
@@ -345,6 +407,21 @@ export function placementAllowed(
   if (placement === "home") return settings.placements.home;
   if (placement === "profiles") return settings.placements.profiles;
   return false;
+}
+
+/**
+ * True when the native slot will draw the built-in banner rather than network
+ * code: the slot is on, its code box is empty, the fallback is enabled, and
+ * there is a click-through link for the button to open.
+ */
+export function usesHouseBanner(settings: AdSettings): boolean {
+  return (
+    settings.enabled &&
+    settings.native.enabled &&
+    settings.native.code.trim() === "" &&
+    settings.house.enabled &&
+    !!settings.click.url
+  );
 }
 
 /** Human label for a placement, used by the admin summary. */

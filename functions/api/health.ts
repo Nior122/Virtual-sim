@@ -42,6 +42,8 @@ const FEATURES = [
   "hourly-call-cooldown",
   "advert-script-only-snippets",
   "advert-diagnostics",
+  "advert-house-banner",
+  "advert-inpage-native",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {
