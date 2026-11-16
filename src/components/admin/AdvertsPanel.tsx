@@ -32,10 +32,12 @@ import { buildFrame } from "../../lib/ads/inject";
 import {
   BANNER_POSITIONS,
   DEFAULT_CLICK_URL,
+  HOUSE_TEXT_LIMITS,
   POPUNDER_MAX_COOLDOWN_SECONDS,
   POPUNDER_MAX_PER_SESSION,
   defaultAdSettings,
   snippetReport,
+  usesHouseBanner,
   type AdSettings,
   type BannerPosition,
   type ClickMode,
@@ -295,21 +297,45 @@ export default function AdvertsPanel() {
     );
   }
 
+
+
+  const clickOn = draft.enabled && draft.click.mode !== "off" && !!draft.click.url;
+
+  /**
+   * "Live" means a visitor can actually see this format.
+   *
+   * The native slot is the one that can be live without pasted code: its
+   * in-page component draws the house banner when the box is empty. Showing
+   * "off" there when something *is* on screen is exactly the kind of mismatch
+   * that makes an owner think the banner is broken.
+   */
+  const houseOn = usesHouseBanner(draft);
+  const nativeLive =
+    draft.enabled &&
+    draft.native.enabled &&
+    (!!draft.native.code.trim() || houseOn);
+
   const live = [
     draft.popunder.enabled && draft.popunder.code.trim() ? "pop-under" : null,
     draft.socialBar.enabled && draft.socialBar.code.trim() ? "social bar" : null,
-    draft.native.enabled && draft.native.code.trim() ? "native banner" : null,
+    draft.native.enabled && draft.native.code.trim()
+      ? "native banner"
+      : houseOn
+        ? "house banner (built-in)"
+        : null,
   ].filter(Boolean) as string[];
-
-  const clickOn = draft.enabled && draft.click.mode !== "off" && !!draft.click.url;
 
   // Formats the owner switched on but left without code: on paper "live", in
   // reality invisible. This is the state that produces "the adverts are not
   // showing".
+  // Formats with the switch on, no network code, and nothing drawn in their
+  // place: they earn nothing until the owner pastes a snippet.
   const idle = [
     draft.popunder.enabled && !draft.popunder.code.trim() ? "pop-under" : null,
     draft.socialBar.enabled && !draft.socialBar.code.trim() ? "social bar" : null,
-    draft.native.enabled && !draft.native.code.trim() ? "native banner" : null,
+    draft.native.enabled && !draft.native.code.trim() && !houseOn
+      ? "native banner"
+      : null,
   ].filter(Boolean) as string[];
 
   return (
@@ -345,7 +371,7 @@ export default function AdvertsPanel() {
             ["Send button", clickOn],
             ["Pop-under", !!draft.popunder.enabled && !!draft.popunder.code.trim()],
             ["Social bar", !!draft.socialBar.enabled && !!draft.socialBar.code.trim()],
-            ["Native banner", !!draft.native.enabled && !!draft.native.code.trim()],
+            ["Native banner", nativeLive],
           ].map(([label, on]) => (
             <div
               key={String(label)}
@@ -375,12 +401,13 @@ export default function AdvertsPanel() {
         {draft.enabled && idle.length > 0 && (
           <div className="mt-3">
             <Notice kind="warn">
-              {idle.length === 3 ? "All three" : idle.length === 2 ? "Two" : "One"} of
-              the three code formats{" "}
-              {idle.length === 1 ? "is" : "are"} switched on but empty
-              ({idle.join(", ")}), so visitors see nothing from{" "}
-              {idle.length === 1 ? "it" : "them"}. Paste the code your network
-              gives you into the box below and press Save.
+              Switched on but empty ({idle.join(", ")}): visitors see nothing from{" "}
+              {idle.length === 1 ? "this format" : "these formats"}, so it earns
+              nothing. Paste the code your network gives you into the box below and
+              press Save.
+              {draft.native.enabled && !draft.native.code.trim() && houseOn
+                ? " The native banner is the exception: until you paste its code it shows the built-in house banner, which is on."
+                : ""}
             </Notice>
           </div>
         )}
@@ -713,7 +740,7 @@ export default function AdvertsPanel() {
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
           <Field
             label="Position"
-            hint="Inline is the safe default. On the chat screen it sits below the chat, so a pinned bar is the only position that is seen there."
+            hint="Inline puts the banner inside the page it belongs to — under the hero on the home page, above the profile details. A pinned bar sits under the navigation bar (never over it) and keeps a small × to dismiss it."
           >
             <Select
               value={draft.native.position}
@@ -736,7 +763,8 @@ export default function AdvertsPanel() {
           <p className="text-[11px] text-neutral-500 mt-2 leading-relaxed">
             The banner is placed bare: no “Advertisement” label, no border, no
             background, no shadow. Whatever frame you see comes from the network's
-            own creative.
+            own creative. It is rendered inside the page — home, browse and every
+            profile — so it is read instead of being appended after the footer.
           </p>
           {(draft.native.position === "fixed-bottom" ||
             draft.native.position === "fixed-top") && (
@@ -752,6 +780,116 @@ export default function AdvertsPanel() {
         </div>
       </CodeCard>
 
+      {/* House banner — the fallback creative */}
+      <Card>
+        <SectionTitle
+          title="Built-in banner"
+          subtitle="Shown wherever the native banner is placed while its code box is empty — so a switched-on slot never displays a blank space. Pasted network code always replaces it."
+          right={
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge tone={houseOn ? "green" : "neutral"}>
+                {houseOn ? "in use" : "idle"}
+              </Badge>
+              <Toggle
+                checked={draft.house.enabled}
+                onChange={(next) =>
+                  patchDraft({ house: { ...draft.house, enabled: next } })
+                }
+                label="Built-in banner on"
+              />
+            </div>
+          }
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Headline" hint={`Up to ${HOUSE_TEXT_LIMITS.headline} characters.`}>
+            <TextInput
+              value={draft.house.headline}
+              maxLength={HOUSE_TEXT_LIMITS.headline}
+              onChange={(event) =>
+                patchDraft({
+                  house: { ...draft.house, headline: event.target.value },
+                })
+              }
+            />
+          </Field>
+          <Field label="Button label" hint={`Up to ${HOUSE_TEXT_LIMITS.cta} characters.`}>
+            <TextInput
+              value={draft.house.cta}
+              maxLength={HOUSE_TEXT_LIMITS.cta}
+              onChange={(event) =>
+                patchDraft({ house: { ...draft.house, cta: event.target.value } })
+              }
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3">
+          <Field label="Supporting line" hint={`Up to ${HOUSE_TEXT_LIMITS.body} characters.`}>
+            <TextArea
+              value={draft.house.body}
+              maxLength={HOUSE_TEXT_LIMITS.body}
+              onChange={(event) =>
+                patchDraft({ house: { ...draft.house, body: event.target.value } })
+              }
+              className="min-h-16"
+            />
+          </Field>
+        </div>
+
+        {/* Live preview, in the site's own markup */}
+        <div className="mt-4">
+          <p className="text-[11px] text-neutral-500 mb-2">Preview</p>
+          <div className="rounded-2xl bg-[#0b0d16] p-3">
+            <div className="w-full rounded-2xl border border-white/[0.08] bg-[#0c0e18] px-5 py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-bold text-white tracking-tight">
+                    {draft.house.headline || "…"}
+                  </p>
+                  <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    {draft.house.body || "…"}
+                  </p>
+                </div>
+                <span className="shrink-0 px-5 py-2.5 rounded-full text-xs font-semibold text-white bg-gradient-to-r from-[#e1147a] via-[#ec4899] to-[#9333ea]">
+                  {draft.house.cta || "…"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-2 leading-relaxed">
+            The button opens the <strong>click-through URL</strong> from the send
+            button card — that is the link the banner earns on. Change it there if
+            you want the banner to point somewhere else.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <Button
+            loading={busy === "house"}
+            onClick={() =>
+              void save("house", { house: draft.house }, "Built-in banner saved.")
+            }
+            disabled={busy === "house"}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" /> Save banner
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={busy === "house"}
+            onClick={() =>
+              void save(
+                "house",
+                { house: defaultAdSettings().house },
+                "Built-in banner restored to the default wording."
+              )
+            }
+          >
+            <RotateCw className="w-3.5 h-3.5" /> Restore default wording
+          </Button>
+        </div>
+      </Card>
+
       {/* Guidance */}
       <Card>
         <SectionTitle
@@ -761,11 +899,13 @@ export default function AdvertsPanel() {
         />
         <ul className="space-y-2 text-[12px] text-neutral-300 leading-relaxed">
           {[
-            "Paste the snippet exactly as the network gave it — an edited or re-typed tag is the number one reason an advert never appears.",
+            "Paste the snippet exactly as the network gave it — an edited or re-typed tag is the number one reason an advert never appears. “Test code” shows what it draws before you save.",
             "One snippet per format. The same code in two slots fires twice and networks read that as fraud; the panel refuses to save it.",
             "Keep the send-button click-through on “first click”: it earns on every conversation without a message ever being lost.",
+            "Never leave a slot switched on and empty. The native banner falls back to the built-in one, but a pop-under or social bar with no code is pure lost revenue.",
             "Cap the pop-under. Traffic quality is what the network pays for, and a returning visitor is worth more than one extra open.",
             "Native banners earn most next to content, so leave it inline until you know the traffic can take a pinned bar.",
+            "The built-in banner needs no network, so it can run from day one — give it a concrete headline (“online now”, a number) rather than a slogan, and point its button at the same click-through as the send button.",
           ].map((line) => (
             <li key={line} className="flex gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />

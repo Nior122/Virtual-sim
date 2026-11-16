@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "./Navbar";
 import PersonaCard from "./PersonaCard";
 import Footer from "./Footer";
+import NativeAd from "./NativeAd";
 
 export default function ExplorePersonas() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -346,6 +347,9 @@ export default function ExplorePersonas() {
           </div>
         )}
       </main>
+
+      {/* In-page advert: owner's network code, or the house banner. */}
+      <NativeAd />
 
       <Footer />
     </div>

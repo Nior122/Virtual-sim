@@ -18,6 +18,7 @@ import {
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import { getPersonaOnlineStatus } from "../utils/personaStatus";
+import NativeAd from "./NativeAd";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -452,6 +453,9 @@ export default function LandingPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* In-page advert: owner's network code, or the house banner. */}
+      <NativeAd />
 
       <Footer />
     </div>

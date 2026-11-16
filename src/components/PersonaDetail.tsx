@@ -45,6 +45,7 @@ import {
   subscribeToPersonaStatus,
   PersonaOnlineStatus
 } from "../utils/personaStatus";
+import NativeAd from "./NativeAd";
 
 export default function PersonaDetail() {
   
@@ -480,6 +481,12 @@ export default function PersonaDetail() {
             </div>
           </div>
         </div>
+
+        {/* In-page advert — first thing after the profile identity block, so a
+            network's native unit can sit next to real content (native networks
+            pay more for that), and an empty code box falls back to the house
+            banner instead of leaving the slot blank. */}
+        <NativeAd variant="card" className="my-5" />
 
         {/* 3-COLUMN COMPACT LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
