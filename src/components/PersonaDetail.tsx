@@ -482,12 +482,6 @@ export default function PersonaDetail() {
           </div>
         </div>
 
-        {/* In-page advert — first thing after the profile identity block, so a
-            network's native unit can sit next to real content (native networks
-            pay more for that), and an empty code box falls back to the house
-            banner instead of leaving the slot blank. */}
-        <NativeAd variant="card" className="my-5" />
-
         {/* 3-COLUMN COMPACT LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* COLUMN 1: LEFT VERTICAL NAVIGATION (lg:col-span-3) */}
@@ -1025,7 +1019,16 @@ export default function PersonaDetail() {
       </AnimatePresence>
 
       {/* FOOTER — hidden in private mode: it links to the home page and the grid */}
-      {!isPrivate && <Footer />}
+      {!isPrivate && (
+        <>
+          {/* In-page advert: at the bottom of the page, just above the footer,
+              in the normal flow so it scrolls with the content. */}
+          <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+            <NativeAd />
+          </div>
+          <Footer />
+        </>
+      )}
     </div>
   );
 }

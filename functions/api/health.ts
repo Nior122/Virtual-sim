@@ -44,6 +44,7 @@ const FEATURES = [
   "advert-diagnostics",
   "advert-house-banner",
   "advert-inpage-native",
+  "advert-footer-placement",
 ];
 
 export async function onRequestGet({ env }: { env?: any }): Promise<Response> {

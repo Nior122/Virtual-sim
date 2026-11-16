@@ -515,19 +515,18 @@ draw. Both must be on for any banner to appear.
 
 ### Where the banner is placed
 
-The native banner is rendered **inside the page**, not appended after the
-footer:
+The native banner is the **last block of the page, directly above the footer**,
+on the home page, the browse page and every profile page. It is in the normal
+flow, so it scrolls with the content like anything else and covers nothing.
 
-- home page — under the hero, above the feature sections;
-- browse page — under the filters, above the profile grid;
-- every profile page — directly under the profile header, above the tabs.
+It is never pinned. A pinned bar was tried and rejected: a saved
+`position: "fixed-top"` made the banner float over the middle of the page, and
+on a phone it could not be scrolled past. The stored position field is kept for
+old records but nothing reads it any more.
 
-An **inline** banner flows in that position and covers nothing. A **pinned**
-(top/bottom) banner floats in the same place as an overlay, is capped at the
-content width, starts **below the navigation bar** (never over it) and keeps a
-small `×` that dismisses it for the visitor's session. Both were wrong before:
-the pinned bar sat at `z-index:45` while the navigation bar is `z-50`, so a
-pinned banner rendered *behind* it and was never seen.
+The banner is placed bare: no "Advertisement" label, no border, no background,
+no shadow, no close button — there is nothing to dismiss because it covers
+nothing.
 
 ### "The adverts are not showing"
 
@@ -566,10 +565,8 @@ cool-down between two opens still applies across those pages.
 ### How a placed banner looks
 
 No wrap of our own: **no "Advertisement" label, no border, no background, no
-shadow.** The wrapper is transparent and sized to the creative, so the banner
-sits in the page the way the network designed it. The only exception is a
-**pinned** banner (top/bottom), which keeps one discreet `×` in its corner so a
-visitor can clear it off the message box; that is invisible on inline banners.
+shadow, no close button.** The wrapper is transparent and sized to the creative,
+so the banner sits in the page the way the network designed it.
 
 > The label is gone from the page, not from the markup: the slot keeps
 > `role="complementary"` and a screen-reader name, which is also what several
@@ -585,9 +582,8 @@ The tab ends with five rules; the short version:
 4. Cap the pop-under (default three per visit, 60 s apart). Visitors who are
    interrupted on every page do not come back, and the network pays less for
    traffic that does not convert.
-5. Leave the native banner `inline` until you know the traffic tolerates a
-   pinned bar. A pinned bar can cover the message box on small phones; the
-   corner `×` clears it for that session.
+5. Leave the banner bare and at the bottom. It does not interrupt anything
+   there, which is why visitors scroll past it instead of leaving.
 
 **Reset everything** clears all four slots and restores the built-in link.
 

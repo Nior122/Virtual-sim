@@ -1,21 +1,20 @@
 // ---------------------------------------------------------------------------
 // The in-page "native" banner.
 //
-// It used to be a `<div>` injected into `<body>` from `AdSlots`, which meant:
+// It sits at the **bottom of the page, just above the footer**, and scrolls
+// with the content like any other block. That is deliberate:
 //
-//   • as a fixed bar at `z-index:45` it sat *under* the site's sticky navbar
-//     (`z-50`), so the live configuration — native on, position `fixed-top` —
-//     rendered nothing a visitor could see;
-//   • as an inline block it landed after the footer, where nobody scrolls;
-//   • because it was injected outside React, a copy change in the admin panel
-//     could not update it, and a network snippet that draws itself asynchronously
-//     had no anchor in the layout.
+//   • a fixed bar is exactly what visitors describe as "stuck in the middle of
+//     the page, and it will not scroll". A saved `position: "fixed-top"` turned
+//     every page into an overlay floating over the content — visible, but not
+//     part of the page, and impossible to get past on a small screen;
+//   • a block placed *after* the footer is never reached at all;
+//   • so: in the flow, under the content, above the footer. No fixed
+//     positioning, no z-index, no scroll trap.
 //
-// This component fixes all three: it renders *in the page flow* where a page
-// places it, re-renders when the owner saves new copy, and when the code box is
-// empty it draws the owner's own house banner (headline, line, button) instead
-// of showing an empty slot. Any network snippet still wins: pasted code is
-// mounted exactly as before, inside a plain container with no chrome.
+// The wrapper draws nothing of its own: no "Advertisement" label, no border,
+// no frame. Pasting network code replaces the built-in creative exactly as
+// before, and the built-in banner keeps the slot earning until then.
 // ---------------------------------------------------------------------------
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -31,48 +30,8 @@ import {
   placementFor,
   usesHouseBanner,
   type AdSettings,
-  type BannerPosition,
 } from "../lib/ads/config";
 import { clearOnPageAdvert, markOnPageAdvert } from "./AdSlots";
-
-const DISMISS_KEY = "dg:ad-native-off";
-
-function dismissed(): boolean {
-  try {
-    return window.sessionStorage.getItem(DISMISS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function rememberDismissed(): void {
-  try {
-    window.sessionStorage.setItem(DISMISS_KEY, "1");
-  } catch {
-    /* storage disabled: hiding it for this page is still right */
-  }
-}
-
-/**
- * Nothing of ours is drawn around the creative — but a *pinned* bar sits on top
- * of the page, so it keeps one discreet ✕. An inline banner covers nothing and
- * gets no chrome at all.
- */
-function closeButton(onHide: () => void) {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        rememberDismissed();
-        onHide();
-      }}
-      aria-label="Hide sponsored content"
-      className="absolute top-1 right-2 z-10 bg-transparent border-0 text-current opacity-35 hover:opacity-70 leading-none cursor-pointer text-[13px] p-1"
-    >
-      ×
-    </button>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // The fallback creative
@@ -94,7 +53,9 @@ function HouseCreative({
   onOpen: () => void;
 }) {
   return (
-    <div className="relative w-full rounded-2xl border border-white/[0.08] bg-[#0c0e18] px-5 py-4 sm:px-6 sm:py-5">
+    // No border, background or label: the owner's standing rule for banner
+    // slots. It reads as the last block of the page, not as a boxed-off ad.
+    <div className="relative w-full px-1 py-2 sm:py-3">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-base sm:text-lg font-bold text-white tracking-tight">
@@ -154,28 +115,16 @@ function NetworkCreative({ code, height }: { code: string; height: number }) {
 // Component
 // ---------------------------------------------------------------------------
 /**
- * `variant` picks the layout the page needs:
- *   card    — a full-width block inside the page content (default)
- *   bar-top — pinned under the navbar, above the content
- *   bar-bottom — pinned to the bottom of the screen
- *
- * A page only renders *one* of them; `AdSlots` mounts no banner of its own.
+ * Mount it once per page, directly above the footer. `className` is only for
+ * spacing; the banner decides nothing about position itself.
  */
-export default function NativeAd({
-  variant = "card",
-  className = "",
-}: {
-  variant?: "card" | "bar-top" | "bar-bottom";
-  className?: string;
-}) {
+export default function NativeAd({ className = "" }: { className?: string }) {
   const { pathname } = useLocation();
   const [settings, setSettings] = useState<AdSettings | null>(null);
-  const [hidden, setHidden] = useState(false);
   const [openTried, setOpenTried] = useState(false);
 
   useEffect(() => {
     installAdDiagnostics();
-    setHidden(dismissed());
     let alive = true;
     getAdSettings()
       .then((next) => {
@@ -190,21 +139,12 @@ export default function NativeAd({
   const placement = placementFor(pathname);
   const allowed = settings ? placementAllowed(settings, placement) : false;
 
-  // Does the owner want a pinned bar? Honour it on the page that renders the
-  // banner in flow: moving the node would remount the creative.
-  const pinned: BannerPosition =
-    variant === "bar-top"
-      ? "fixed-top"
-      : variant === "bar-bottom"
-        ? "fixed-bottom"
-        : (settings?.native.position ?? "inline");
-
   const code = settings?.native.code.trim() ?? "";
   const house = settings ? usesHouseBanner(settings) : false;
   const network = !!settings && settings.native.enabled && code.length > 0;
 
   // An advert that is visible on this page is what the pop-under waits for.
-  const visible = !!settings && allowed && !hidden && (house || network);
+  const visible = !!settings && allowed && (house || network);
   useEffect(() => {
     if (!visible) return;
     markOnPageAdvert(pathname);
@@ -223,8 +163,6 @@ export default function NativeAd({
         verdict: "not-allowed-on-route",
         detail: placement,
       });
-    } else if (hidden) {
-      noteAd({ format: "native", verdict: "dismissed" });
     } else if (!code && !settings.house.enabled) {
       noteAd({ format: "native", verdict: "empty-code" });
     } else if (!code && !settings.click.url) {
@@ -232,7 +170,7 @@ export default function NativeAd({
     } else if (house) {
       noteAd({ format: "native", verdict: "house-fallback" });
     }
-  }, [settings, allowed, placement, hidden, code, house]);
+  }, [settings, allowed, placement, code, house]);
 
   // The house banner's button opens the same click-through the send button
   // uses, and records that the visitor responded before it opens the tab.
@@ -256,35 +194,24 @@ export default function NativeAd({
     }
   };
 
-  if (!settings || !allowed || hidden) return null;
+  if (!settings || !allowed) return null;
   if (!house && !network) return null;
 
-  const isPinned = pinned !== "inline";
-  const wrapper = isPinned
-    ? // `top-[4.5rem] sm:top-20` clears the sticky navbar (h-18 → 72px,
-      // h-20 → 80px). The old injected bar used z-45 at top-0, i.e. *behind*
-      // that navbar, which is why a fixed-top banner never appeared.
-      `fixed left-0 right-0 z-40 px-3 sm:px-6 ${
-        pinned === "fixed-top"
-          ? "top-[4.5rem] sm:top-20"
-          : "bottom-0 pb-[env(safe-area-inset-bottom)]"
-      } pointer-events-none`
-    : "w-full my-6 sm:my-8";
-
   const creative = code ? (
-    <NetworkCreative code={code} height={pinned === "fixed-top" ? 90 : 100} />
+    <NetworkCreative code={code} height={110} />
   ) : (
     <HouseCreative house={settings.house} onOpen={openHouseLink} />
   );
 
   return (
-    <div className={`${wrapper} ${className}`} data-dg-ad="native">
-      <div className={isPinned ? "pointer-events-auto relative mx-auto max-w-3xl" : "relative"}>
-        {/* Screen readers get a name; nothing visible is added to the page. */}
-        <div role="complementary" aria-label="Sponsored content">
-          {creative}
-        </div>
-        {isPinned && closeButton(() => setHidden(true))}
+    <div
+      className={`w-full mt-8 mb-6 sm:mt-10 sm:mb-8 ${className}`}
+      data-dg-ad="native"
+      data-dg-ad-position="above-footer"
+    >
+      {/* Screen readers get a name; nothing visible is added to the page. */}
+      <div role="complementary" aria-label="Sponsored content">
+        {creative}
       </div>
     </div>
   );
